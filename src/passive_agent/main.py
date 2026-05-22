@@ -292,5 +292,41 @@ def init_stars(ctx, max_pages: int):
         db.close()
 
 
+@cli.command("zotero-writeback")
+@click.option("--execute", is_flag=True, default=False,
+              help="正式执行写入（默认 dry-run 仅打印）")
+@click.pass_context
+def zotero_writeback(ctx, execute: bool):
+    """测试/执行 Zotero tag 回写（默认 dry-run）"""
+    import asyncio
+
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
+
+        if not ZoteroWriteBack.is_available():
+            click.echo("Error: Zotero local API not available (is Zotero running with HTTP API enabled?)", err=True)
+            raise SystemExit(1)
+
+        dry_run = not execute
+        if dry_run:
+            click.echo("Running in DRY-RUN mode (use --execute to write for real)")
+        else:
+            click.echo("⚠ EXECUTE mode: will modify Zotero item tags!")
+
+        wb = ZoteroWriteBack(db, dry_run=dry_run)
+        count = asyncio.run(wb.flush_queue())
+
+        if execute:
+            click.echo(f"Done. {count} tags written to Zotero.")
+        else:
+            click.echo("Dry-run complete. No changes made.")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     cli()

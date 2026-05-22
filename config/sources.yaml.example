@@ -6,6 +6,8 @@ zotero:
     - Agent
     - RAG
     - LLM
+  # 是否启用 Zotero tag 回写（会修改 Zotero 条目，请先用 CLI dry-run 测试）
+  writeback_enabled: false
 
 obsidian:
   enabled: false

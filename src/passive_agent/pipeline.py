@@ -148,14 +148,22 @@ class DailyPipeline:
                 errors.append(f"Feishu push: {e}")
 
         # 11. Zotero write-back (flush pending tag writes)
-        try:
-            from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
-            if ZoteroWriteBack.is_available():
-                wb = ZoteroWriteBack(self.db)
-                import asyncio
-                await wb.flush_queue()
-        except Exception as e:
-            log.warning(f"Zotero write-back skipped: {e}")
+        if self.config.sources.zotero.writeback_enabled:
+            try:
+                from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
+                if ZoteroWriteBack.is_available():
+                    wb = ZoteroWriteBack(self.db, dry_run=False)
+                    await wb.flush_queue()
+            except Exception as e:
+                log.warning(f"Zotero write-back skipped: {e}")
+        else:
+            try:
+                from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
+                if ZoteroWriteBack.is_available():
+                    wb = ZoteroWriteBack(self.db, dry_run=True)
+                    await wb.flush_queue()
+            except Exception as e:
+                pass
 
         # 12. Log
         self.db.log_daily_run(date.today(), len(raw_items), len(new_items), len(top_items), errors)

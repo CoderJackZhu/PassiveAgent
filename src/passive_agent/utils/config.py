@@ -39,6 +39,7 @@ class ZoteroSourceConfig:
     db_path: str = "~/Zotero/zotero.sqlite"
     lookback_days: int = 7
     high_priority_collections: list[str] = field(default_factory=list)
+    writeback_enabled: bool = False
 
 
 @dataclass
@@ -103,6 +104,7 @@ def load_config(config_dir: str = "config") -> AppConfig:
             db_path=zotero_raw.get("db_path", "~/Zotero/zotero.sqlite"),
             lookback_days=zotero_raw.get("lookback_days", 7),
             high_priority_collections=zotero_raw.get("high_priority_collections", []),
+            writeback_enabled=zotero_raw.get("writeback_enabled", False),
         ),
         obsidian=ObsidianSourceConfig(
             enabled=obsidian_raw.get("enabled", True),
