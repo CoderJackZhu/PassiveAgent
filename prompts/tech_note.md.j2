@@ -1,0 +1,39 @@
+基于以下内容，生成一篇结构化技术笔记。
+
+## 原始内容
+
+标题：{{ title }}
+来源：{{ source }}
+摘要：{{ summary }}
+面试关联：{{ interview_relevance }}
+{% if url %}链接：{{ url }}{% endif %}
+
+## 输出要求
+
+直接输出 Markdown 格式的技术笔记，不要加代码块标记。格式如下：
+
+---
+type: tech-note
+topic: [{{ topics }}]
+source: {{ title }}
+source_url: {{ url or '' }}
+created: {{ today }}
+---
+
+# {{ title }}
+
+## 核心观点
+
+- {3-5 个 bullet point，每个一句话}
+
+## 技术细节
+
+{关键实现、架构、算法描述，使用技术语言}
+
+## 与已有知识的关联
+
+{和 Agent / RAG / Tool Calling 等领域的哪些知识相关}
+
+## 可能的应用场景
+
+{在什么场景下用得上，是否可以出面试题}

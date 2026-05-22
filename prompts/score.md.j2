@@ -1,0 +1,43 @@
+为以下内容的面试准备价值打分，每个维度 0-100 分。
+
+## 内容
+
+标题：{{ title }}
+摘要：{{ summary }}
+面试关联：{{ interview_relevance }}
+来源类型：{{ source }}
+内容类型：{{ content_type }}
+
+## 已有面试卡标题（用于判断新颖性）
+
+{% for card_title in existing_cards %}- {{ card_title }}
+{% endfor %}
+{% if not existing_cards %}- （暂无已有卡片）
+{% endif %}
+
+## 当前关注方向
+
+{% for topic in priority_topics %}- {{ topic }}
+{% endfor %}
+
+## 打分维度
+
+1. goal_relevance: 是否和 Agent 岗面试直接相关
+2. novelty: 是否是上面已有卡片没有覆盖的新内容
+3. actionability: 能否转化为面试回答、demo、代码
+4. difficulty_fit: 是否适合 30 分钟内消化
+5. source_quality: 官方文档/源码/论文 > 泛泛博客
+6. timeliness: 近期发布/更新的内容优先
+
+## 输出
+
+严格输出 JSON，不要输出其他内容：
+
+{
+  "goal_relevance": 85,
+  "novelty": 70,
+  "actionability": 90,
+  "difficulty_fit": 75,
+  "source_quality": 80,
+  "timeliness": 60
+}

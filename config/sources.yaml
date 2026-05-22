@@ -1,0 +1,17 @@
+zotero:
+  enabled: true
+  db_path: "~/Zotero/zotero.sqlite"
+  lookback_days: 7
+  high_priority_collections:
+    - Agent
+    - RAG
+    - LLM
+
+obsidian:
+  enabled: false
+  inbox_path: "~/ObsidianVault/00-Inbox/inbox.md"
+  vault_path: "~/ObsidianVault"
+
+github_stars:
+  enabled: false
+  mode: "passive_index"

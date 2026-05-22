@@ -1,0 +1,17 @@
+current_focus: "Agent 算法岗面试准备"
+
+priority_topics:
+  - Agent 架构与工程
+  - Tool Calling 与 Function Calling
+  - RAG 与评测
+  - Workflow / Orchestration
+  - Coding Agent
+  - LLM Infra（推理优化、部署）
+  - 模型评测方法论
+
+low_priority_topics:
+  - 前端开发
+  - 移动开发
+  - 泛泛的 AI 趋势文章
+
+output_preference: "interview_card"
