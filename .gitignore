@@ -19,3 +19,8 @@ data/reports/
 
 # Environment
 .env
+
+# User-specific config (use *.yaml.example as template)
+config/goals.yaml
+config/sources.yaml
+config/scoring.yaml

@@ -1149,7 +1149,7 @@ created: {{ today }}
     <string>com.passive-agent.daily</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin/python</string>
+        <string><PROJECT_DIR>/.venv/bin/python</string>
         <string>-m</string>
         <string>src.main</string>
         <string>daily</string>
@@ -1162,11 +1162,11 @@ created: {{ today }}
         <integer>0</integer>
     </dict>
     <key>WorkingDirectory</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent</string>
+    <string><PROJECT_DIR></string>
     <key>StandardOutPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/daily_stdout.log</string>
+    <string><PROJECT_DIR>/data/reports/daily_stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/daily_stderr.log</string>
+    <string><PROJECT_DIR>/data/reports/daily_stderr.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -1187,21 +1187,21 @@ created: {{ today }}
     <string>com.passive-agent.serve</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin/python</string>
+        <string><PROJECT_DIR>/.venv/bin/python</string>
         <string>-m</string>
         <string>src.main</string>
         <string>serve</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent</string>
+    <string><PROJECT_DIR></string>
     <key>KeepAlive</key>
     <true/>
     <key>ThrottleInterval</key>
     <integer>30</integer>
     <key>StandardOutPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/serve_stdout.log</string>
+    <string><PROJECT_DIR>/data/reports/serve_stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/serve_stderr.log</string>
+    <string><PROJECT_DIR>/data/reports/serve_stderr.log</string>
 </dict>
 </plist>
 ```

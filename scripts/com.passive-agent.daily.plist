@@ -6,7 +6,7 @@
     <string>com.passive-agent.daily</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin/passive-agent</string>
+        <string>__PROJECT_DIR__/.venv/bin/passive-agent</string>
         <string>daily</string>
     </array>
     <key>StartCalendarInterval</key>
@@ -17,15 +17,15 @@
         <integer>0</integer>
     </dict>
     <key>WorkingDirectory</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent</string>
+    <string>__PROJECT_DIR__</string>
     <key>StandardOutPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/daily_stdout.log</string>
+    <string>__PROJECT_DIR__/data/reports/daily_stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/daily_stderr.log</string>
+    <string>__PROJECT_DIR__/data/reports/daily_stderr.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin:__PROJECT_DIR__/.venv/bin</string>
     </dict>
 </dict>
 </plist>
