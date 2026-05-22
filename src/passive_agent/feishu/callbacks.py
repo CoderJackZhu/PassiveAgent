@@ -50,6 +50,10 @@ class CallbackHandler:
             return await self._handle_weekend(item_id)
         elif action == "read":
             return await self._handle_read(item_id)
+        elif action == "link":
+            return await self._handle_link(item_id)
+        elif action == "mute":
+            return await self._handle_mute(item_id)
         else:
             log.warning(f"Unknown action: {action}")
             return None
@@ -124,5 +128,20 @@ class CallbackHandler:
 
     async def _handle_read(self, item_id: str) -> dict | None:
         handler = MarkReadAction(self.db, self.writer)
+        result = await handler.execute(item_id)
+        return {"type": "toast", "text": result.message}
+
+    async def _handle_link(self, item_id: str) -> dict | None:
+        from passive_agent.actions.link_notes import LinkNotesAction
+        handler = LinkNotesAction(self.db, self.writer)
+        result = await handler.execute(item_id)
+        if result.success and "未找到" not in result.message:
+            card = CardBuilder.build_result_card("关联笔记", result.message)
+            return {"type": "new_message", "card": card}
+        return {"type": "toast", "text": result.message}
+
+    async def _handle_mute(self, item_id: str) -> dict | None:
+        from passive_agent.actions.mute_similar import MuteSimilarAction
+        handler = MuteSimilarAction(self.db, self.config.scoring.negative_feedback)
         result = await handler.execute(item_id)
         return {"type": "toast", "text": result.message}

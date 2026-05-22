@@ -147,7 +147,17 @@ class DailyPipeline:
                 log.error(f"Feishu push failed: {e}")
                 errors.append(f"Feishu push: {e}")
 
-        # 11. Log
+        # 11. Zotero write-back (flush pending tag writes)
+        try:
+            from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
+            if ZoteroWriteBack.is_available():
+                wb = ZoteroWriteBack(self.db)
+                import asyncio
+                await wb.flush_queue()
+        except Exception as e:
+            log.warning(f"Zotero write-back skipped: {e}")
+
+        # 12. Log
         self.db.log_daily_run(date.today(), len(raw_items), len(new_items), len(top_items), errors)
 
         return PipelineResult(
@@ -191,3 +201,64 @@ class DailyPipeline:
 def run_pipeline(config: AppConfig, db: Database) -> PipelineResult:
     pipeline = DailyPipeline(config, db)
     return asyncio.run(pipeline.run())
+
+
+def generate_weekly_report(config: AppConfig, db: Database) -> str:
+    """生成周报 Markdown 并写入 reports 目录"""
+    from datetime import timedelta
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    archived = db.get_items_by_stage("archived")
+    ignored = db.get_items_by_stage("ignored")
+    recommended = db.get_items_by_stage("recommended")
+
+    week_archived = [i for i in archived if i.actioned_at and i.actioned_at.date() >= week_start]
+    week_ignored = [i for i in ignored if i.created_at.date() >= week_start]
+
+    # Topic distribution
+    topic_counts: dict[str, int] = {}
+    for item in week_archived:
+        for topic in item.topics:
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+
+    lines = [
+        f"# 周报 · {week_start.isoformat()} ~ {today.isoformat()}\n",
+        f"## 概览\n",
+        f"- 已处理归档：{len(week_archived)} 条",
+        f"- 已忽略：{len(week_ignored)} 条",
+        f"- 当前待处理：{len(recommended)} 条",
+        "",
+    ]
+
+    if week_archived:
+        lines.append("## 本周处理\n")
+        for item in week_archived[:10]:
+            lines.append(f"- [{item.title[:50]}] → {item.stage}")
+        lines.append("")
+
+    if topic_counts:
+        lines.append("## Topic 分布\n")
+        for topic, count in sorted(topic_counts.items(), key=lambda x: -x[1]):
+            lines.append(f"- {topic}: {count}")
+        lines.append("")
+
+    # Weight changes
+    rows = db.conn.execute(
+        "SELECT topic, weight FROM topic_weights WHERE weight < 1.0"
+    ).fetchall()
+    if rows:
+        lines.append("## 降权 Topics\n")
+        for r in rows:
+            lines.append(f"- {r['topic']}: {r['weight']:.2f}")
+        lines.append("")
+
+    lines.append(f"\n---\n*Generated: {today.isoformat()}*\n")
+
+    reports_dir = Path(config.reports_dir)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    output_path = reports_dir / f"weekly_review_{today.isoformat()}.md"
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    log.info(f"Weekly report written to {output_path}")
+    return str(output_path)

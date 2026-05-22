@@ -72,6 +72,23 @@ def init_db(ctx):
     click.echo(f"Database initialized at {config.db_path}")
 
 
+@cli.command("weekly-report")
+@click.pass_context
+def weekly_report(ctx):
+    """生成本周周报"""
+    from passive_agent.pipeline import generate_weekly_report
+
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        path = generate_weekly_report(config, db)
+        click.echo(f"Weekly report: {path}")
+    finally:
+        db.close()
+
+
 @cli.command()
 @click.pass_context
 def status(ctx):
@@ -153,11 +170,11 @@ def list_items(ctx, stage: str, limit: int):
 @cli.command()
 @click.argument("item_id")
 @click.option("--type", "action_type", required=True,
-              type=click.Choice(["card", "note", "ignore", "read"]),
+              type=click.Choice(["card", "note", "ignore", "read", "link", "mute"]),
               help="执行的操作类型")
 @click.pass_context
 def action(ctx, item_id: str, action_type: str):
-    """对条目执行操作 (生成面试卡/笔记/忽略/标记已读)"""
+    """对条目执行操作 (生成面试卡/笔记/忽略/标记已读/关联笔记/少推类似)"""
     import asyncio
 
     config = load_config(ctx.obj["config_dir"])
@@ -187,7 +204,13 @@ def action(ctx, item_id: str, action_type: str):
                 handler = TechNoteAction(db, llm, writer, config.goals)
         elif action_type == "ignore":
             from passive_agent.actions.ignore import IgnoreAction
-            handler = IgnoreAction(db)
+            handler = IgnoreAction(db, config.scoring.negative_feedback)
+        elif action_type == "link":
+            from passive_agent.actions.link_notes import LinkNotesAction
+            handler = LinkNotesAction(db, writer)
+        elif action_type == "mute":
+            from passive_agent.actions.mute_similar import MuteSimilarAction
+            handler = MuteSimilarAction(db, config.scoring.negative_feedback)
         else:  # read
             from passive_agent.actions.mark_read import MarkReadAction
             handler = MarkReadAction(db, writer)
