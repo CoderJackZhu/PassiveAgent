@@ -8,7 +8,7 @@ from pathlib import Path
 from passive_agent.storage.models import FeedbackRecord, Item, Score
 from passive_agent.utils.logger import log
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS items (
@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS zotero_write_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_key TEXT NOT NULL,
     tag TEXT NOT NULL,
+    remove_tag TEXT,
     created_at TEXT NOT NULL,
     executed_at TEXT
 );
@@ -118,6 +119,12 @@ class Database:
         current_version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if current_version < SCHEMA_VERSION:
             self.conn.executescript(SCHEMA_SQL)
+            # Migrations
+            if current_version < 2:
+                try:
+                    self.conn.execute("ALTER TABLE zotero_write_queue ADD COLUMN remove_tag TEXT")
+                except sqlite3.OperationalError:
+                    pass  # column already exists (fresh DB)
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             self.conn.commit()
             log.info(f"Database initialized (version {SCHEMA_VERSION})")
@@ -323,16 +330,16 @@ class Database:
 
     # --- Zotero Write Queue ---
 
-    def enqueue_zotero_write(self, item_key: str, tag: str):
+    def enqueue_zotero_write(self, item_key: str, tag: str, remove_tag: str | None = None):
         self.conn.execute(
-            "INSERT INTO zotero_write_queue (item_key, tag, created_at) VALUES (?, ?, ?)",
-            (item_key, tag, datetime.now().isoformat()),
+            "INSERT INTO zotero_write_queue (item_key, tag, remove_tag, created_at) VALUES (?, ?, ?, ?)",
+            (item_key, tag, remove_tag, datetime.now().isoformat()),
         )
         self.conn.commit()
 
     def get_pending_zotero_writes(self) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT id, item_key, tag FROM zotero_write_queue WHERE executed_at IS NULL"
+            "SELECT id, item_key, tag, remove_tag FROM zotero_write_queue WHERE executed_at IS NULL"
         ).fetchall()
         return [dict(r) for r in rows]
 

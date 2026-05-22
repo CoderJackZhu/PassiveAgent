@@ -1,23 +1,46 @@
 from __future__ import annotations
 
+import os
+
 import httpx
 
 from passive_agent.storage.database import Database
 from passive_agent.utils.logger import log
 
 ZOTERO_LOCAL_API = "http://localhost:23119/api"
+ZOTERO_WEB_API = "https://api.zotero.org"
 
 
 class ZoteroWriteBack:
-    """通过 Zotero local HTTP API (port 23119) 将 tag 写回 Zotero
+    """通过 Zotero Web API 将 tag 写回 Zotero
 
-    注意：此功能会修改 Zotero 条目的 tag，默认 dry_run=True 仅打印不执行。
-    确认测试通过后设置 dry_run=False 正式启用。
+    本地 API (23119) 只读，写入需通过 api.zotero.org + API key。
+    默认 dry_run=True 仅打印不执行，确认测试通过后设置 dry_run=False 正式启用。
     """
 
     def __init__(self, db: Database, dry_run: bool = True):
         self.db = db
         self.dry_run = dry_run
+        self.api_key = os.environ.get("ZOTERO_API_KEY", "")
+        self.user_id = ""
+
+    async def _resolve_user_id(self, client: httpx.AsyncClient) -> str:
+        """从本地 API 获取 user ID"""
+        if self.user_id:
+            return self.user_id
+        try:
+            resp = await client.get(f"{ZOTERO_LOCAL_API}/users/0/items?limit=1")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data:
+                    href = data[0].get("links", {}).get("self", {}).get("href", "")
+                    # href like http://localhost:23119/api/users/9496887/items/KEY
+                    parts = href.split("/users/")
+                    if len(parts) > 1:
+                        self.user_id = parts[1].split("/")[0]
+        except Exception:
+            pass
+        return self.user_id
 
     async def flush_queue(self) -> int:
         pending = self.db.get_pending_zotero_writes()
@@ -28,14 +51,31 @@ class ZoteroWriteBack:
         if self.dry_run:
             log.info(f"Zotero write-back DRY RUN: {len(pending)} pending writes:")
             for entry in pending:
-                log.info(f"  [dry-run] would add tag '{entry['tag']}' to item {entry['item_key']}")
+                remove = entry.get("remove_tag")
+                if remove:
+                    log.info(f"  [dry-run] would replace tag '{remove}' → '{entry['tag']}' on item {entry['item_key']}")
+                else:
+                    log.info(f"  [dry-run] would add tag '{entry['tag']}' to item {entry['item_key']}")
+            return 0
+
+        if not self.api_key:
+            log.warning("Zotero write-back: ZOTERO_API_KEY not set, skipping")
             return 0
 
         success_count = 0
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
+            user_id = await self._resolve_user_id(client)
+            if not user_id:
+                log.warning("Zotero write-back: could not resolve user ID")
+                return 0
+
             for entry in pending:
                 try:
-                    ok = await self._add_tag(client, entry["item_key"], entry["tag"])
+                    ok = await self._update_tags(
+                        client, user_id, entry["item_key"],
+                        add_tag=entry["tag"],
+                        remove_tag=entry.get("remove_tag"),
+                    )
                     if ok:
                         self.db.mark_zotero_write_done(entry["id"])
                         success_count += 1
@@ -45,33 +85,55 @@ class ZoteroWriteBack:
         log.info(f"Zotero write-back: {success_count}/{len(pending)} tags written")
         return success_count
 
-    async def _add_tag(self, client: httpx.AsyncClient, item_key: str, tag: str) -> bool:
-        resp = await client.get(f"{ZOTERO_LOCAL_API}/users/0/items/{item_key}")
+    async def _update_tags(self, client: httpx.AsyncClient, user_id: str,
+                           item_key: str, add_tag: str, remove_tag: str | None = None) -> bool:
+        headers = {
+            "Zotero-API-Key": self.api_key,
+            "Zotero-API-Version": "3",
+        }
+
+        resp = await client.get(
+            f"{ZOTERO_WEB_API}/users/{user_id}/items/{item_key}",
+            headers=headers,
+        )
         if resp.status_code != 200:
-            log.warning(f"Zotero API: item {item_key} not found ({resp.status_code})")
+            log.warning(f"Zotero Web API: item {item_key} not found ({resp.status_code})")
             return False
 
         item_data = resp.json()
         tags = item_data.get("data", {}).get("tags", [])
-
-        if any(t.get("tag") == tag for t in tags):
-            log.info(f"Zotero: tag '{tag}' already on {item_key}, skipping")
-            return True
-
-        tags.append({"tag": tag})
         version = item_data.get("version", 0)
 
+        changed = False
+
+        if remove_tag:
+            new_tags = [t for t in tags if t.get("tag") != remove_tag]
+            if len(new_tags) != len(tags):
+                changed = True
+                tags = new_tags
+
+        if not any(t.get("tag") == add_tag for t in tags):
+            tags.append({"tag": add_tag})
+            changed = True
+
+        if not changed:
+            log.info(f"Zotero: tags already correct on {item_key}, skipping")
+            return True
+
         patch_resp = await client.patch(
-            f"{ZOTERO_LOCAL_API}/users/0/items/{item_key}",
+            f"{ZOTERO_WEB_API}/users/{user_id}/items/{item_key}",
             json={"tags": tags},
-            headers={"If-Unmodified-Since-Version": str(version)},
+            headers={**headers, "If-Unmodified-Since-Version": str(version)},
         )
 
         if patch_resp.status_code in (200, 204):
-            log.info(f"Zotero: added tag '{tag}' to {item_key}")
+            if remove_tag:
+                log.info(f"Zotero: replaced '{remove_tag}' → '{add_tag}' on {item_key}")
+            else:
+                log.info(f"Zotero: added tag '{add_tag}' to {item_key}")
             return True
         else:
-            log.warning(f"Zotero patch failed for {item_key}: {patch_resp.status_code}")
+            log.warning(f"Zotero patch failed for {item_key}: {patch_resp.status_code} {patch_resp.text[:100]}")
             return False
 
     @staticmethod

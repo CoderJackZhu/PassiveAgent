@@ -18,9 +18,9 @@ class MarkReadAction:
 
         self.db.update_item_stage(item_id, "archived")
 
-        # Zotero tag 写回入队
+        # Zotero tag 写回入队: /unread → /done
         if item.zotero_key:
-            self.db.enqueue_zotero_write(item.zotero_key, "✓已读")
+            self.db.enqueue_zotero_write(item.zotero_key, "/done", remove_tag="/unread")
 
         # Obsidian inbox 标记
         if item.source == "obsidian_inbox" and item.raw_text:
