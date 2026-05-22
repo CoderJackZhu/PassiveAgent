@@ -170,11 +170,11 @@ def list_items(ctx, stage: str, limit: int):
 @cli.command()
 @click.argument("item_id")
 @click.option("--type", "action_type", required=True,
-              type=click.Choice(["card", "note", "ignore", "read", "link", "mute"]),
+              type=click.Choice(["card", "note", "ignore", "read", "link", "mute", "weekend"]),
               help="执行的操作类型")
 @click.pass_context
 def action(ctx, item_id: str, action_type: str):
-    """对条目执行操作 (生成面试卡/笔记/忽略/标记已读/关联笔记/少推类似)"""
+    """对条目执行操作 (生成面试卡/笔记/忽略/标记已读/关联笔记/少推类似/加入周末)"""
     import asyncio
 
     config = load_config(ctx.obj["config_dir"])
@@ -211,6 +211,15 @@ def action(ctx, item_id: str, action_type: str):
         elif action_type == "mute":
             from passive_agent.actions.mute_similar import MuteSimilarAction
             handler = MuteSimilarAction(db, config.scoring.negative_feedback)
+        elif action_type == "weekend":
+            item = db.get_item(item_id)
+            if not item:
+                click.echo(f"✗ Item not found: {item_id}", err=True)
+                raise SystemExit(1)
+            db.conn.execute("UPDATE items SET is_weekend = 1 WHERE id = ?", (item_id,))
+            db.conn.commit()
+            click.echo(f"✓ 已加入周末队列: {item.title}")
+            return
         else:  # read
             from passive_agent.actions.mark_read import MarkReadAction
             handler = MarkReadAction(db, writer)
