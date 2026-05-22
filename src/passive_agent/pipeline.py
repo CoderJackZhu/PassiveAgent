@@ -36,7 +36,8 @@ class DailyPipeline:
         self.db = db
         self.llm = llm
         self.feishu_bot = feishu_bot
-        self.normalizer = Normalizer(db)
+        self.prompts_dir = str(Path(config.project_root) / config.prompts_dir) if config.project_root else config.prompts_dir
+        self.normalizer = Normalizer(db, config.sources.zotero.high_priority_collections)
         self.deduplicator = Deduplicator(db)
 
     def _init_collectors(self) -> list:
@@ -111,14 +112,16 @@ class DailyPipeline:
             return PipelineResult(status="success", collected=len(raw_items), processed=len(new_items))
 
         # 4. Summarize
-        summarizer = Summarizer(self.llm, self.config.goals)
+        summarizer = Summarizer(self.llm, self.config.goals, self.prompts_dir)
         summarized = await summarizer.summarize_batch(new_items)
 
         # 保存已摘要的条目（scorer 的 save_score 需要 items 表中有记录）
         self.db.save_items(summarized)
 
         # 5. Score
-        scorer = Scorer(self.llm, self.config.goals, self.config.scoring, self.db)
+        scorer = Scorer(self.llm, self.config.goals, self.config.scoring, self.db,
+                        prompts_dir=self.prompts_dir,
+                        high_priority_collections=self.config.sources.zotero.high_priority_collections)
         scored = await scorer.score_batch(summarized)
 
         # 6. Rank + Top N

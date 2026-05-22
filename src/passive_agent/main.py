@@ -186,6 +186,7 @@ def action(ctx, item_id: str, action_type: str):
         from passive_agent.integrations.obsidian_writer import ObsidianWriter
 
         writer = ObsidianWriter(config.sources.obsidian.vault_path)
+        prompts_dir = os.path.join(config.project_root, config.prompts_dir) if config.project_root else config.prompts_dir
 
         if action_type in ("card", "note"):
             api_key = os.environ.get("DEEPSEEK_API_KEY")
@@ -198,10 +199,10 @@ def action(ctx, item_id: str, action_type: str):
 
             if action_type == "card":
                 from passive_agent.actions.interview_card import InterviewCardAction
-                handler = InterviewCardAction(db, llm, writer, config.goals)
+                handler = InterviewCardAction(db, llm, writer, config.goals, prompts_dir)
             else:
                 from passive_agent.actions.tech_note import TechNoteAction
-                handler = TechNoteAction(db, llm, writer, config.goals)
+                handler = TechNoteAction(db, llm, writer, config.goals, prompts_dir)
         elif action_type == "ignore":
             from passive_agent.actions.ignore import IgnoreAction
             handler = IgnoreAction(db, config.scoring.negative_feedback)
@@ -215,6 +216,10 @@ def action(ctx, item_id: str, action_type: str):
             item = db.get_item(item_id)
             if not item:
                 click.echo(f"✗ Item not found: {item_id}", err=True)
+                raise SystemExit(1)
+            current_queue = db.get_weekend_queue()
+            if len(current_queue) >= config.scoring.weekend_limit:
+                click.echo(f"✗ 周末队列已满 ({config.scoring.weekend_limit} 条)", err=True)
                 raise SystemExit(1)
             db.conn.execute("UPDATE items SET is_weekend = 1 WHERE id = ?", (item_id,))
             db.conn.commit()

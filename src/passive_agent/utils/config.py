@@ -79,6 +79,7 @@ class AppConfig:
     db_path: str = "data/workbench.db"
     reports_dir: str = "data/reports"
     prompts_dir: str = "prompts"
+    project_root: str = ""
 
 
 def load_config(config_dir: str = "config") -> AppConfig:
@@ -129,7 +130,8 @@ def load_config(config_dir: str = "config") -> AppConfig:
         negative_feedback=NegativeFeedbackConfig(**feedback_raw),
     )
 
-    return AppConfig(goals=goals, sources=sources, scoring=scoring)
+    return AppConfig(goals=goals, sources=sources, scoring=scoring,
+                     project_root=str(config_path.resolve().parent))
 
 
 def _load_yaml(path: Path) -> dict:

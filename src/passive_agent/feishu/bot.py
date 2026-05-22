@@ -13,7 +13,6 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
     P2CardActionTrigger,
     P2CardActionTriggerResponse,
     CallBackToast,
-    CallBackCard,
 )
 
 from passive_agent.feishu.callbacks import CallbackHandler

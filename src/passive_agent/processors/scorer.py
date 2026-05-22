@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -11,14 +10,18 @@ from passive_agent.storage.models import Item, Score
 from passive_agent.utils.config import GoalsConfig, ScoringConfig
 from passive_agent.utils.logger import log
 
+COLLECTION_BOOST = 1.15
+
 
 class Scorer:
     def __init__(self, llm: DeepSeekClient, goals: GoalsConfig, scoring: ScoringConfig,
-                 db: Database, prompts_dir: str = "prompts"):
+                 db: Database, prompts_dir: str = "prompts",
+                 high_priority_collections: list[str] | None = None):
         self.llm = llm
         self.goals = goals
         self.scoring = scoring
         self.db = db
+        self.high_priority_collections = high_priority_collections or []
         self.jinja = Environment(loader=FileSystemLoader(prompts_dir))
         self.template = self.jinja.get_template("score.md.j2")
 
@@ -91,6 +94,13 @@ class Scorer:
 
     def _calc_weight_adjustment(self, item: Item) -> float:
         adjustment = 1.0
+        # Boost for high-priority collections
+        if self.high_priority_collections:
+            for topic in item.topics:
+                if topic in self.high_priority_collections:
+                    adjustment *= COLLECTION_BOOST
+                    break
+        # Penalty for low-weight topics/sources
         for topic in item.topics:
             tw = self.db.get_topic_weight(topic)
             if tw < 1.0:

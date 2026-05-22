@@ -6,7 +6,7 @@ weights:
   source_quality: 0.10
   timeliness: 0.10
 
-daily_limit: 3
+daily_limit: 5
 weekend_limit: 5
 
 negative_feedback:

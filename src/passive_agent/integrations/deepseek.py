@@ -10,14 +10,15 @@ from passive_agent.utils.logger import log
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str | None = None, base_url: str = "https://api.deepseek.com"):
+    def __init__(self, api_key: str | None = None, base_url: str = "https://api.deepseek.com",
+                 model: str = "deepseek-chat", max_concurrency: int = 5):
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
         if not self.api_key:
             raise ValueError("DEEPSEEK_API_KEY not set")
 
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=base_url)
-        self.model = "deepseek-chat"
-        self._semaphore = asyncio.Semaphore(5)
+        self.model = model
+        self._semaphore = asyncio.Semaphore(max_concurrency)
 
     async def generate(self, system: str, user: str, expect_json: bool = False) -> str:
         async with self._semaphore:

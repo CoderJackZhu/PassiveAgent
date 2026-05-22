@@ -13,6 +13,9 @@ obsidian:
   enabled: false
   inbox_path: "~/ObsidianVault/00-Inbox/inbox.md"
   vault_path: "~/ObsidianVault"
+  # 只读输入目录（关联笔记搜索），支持多个
+  read_paths:
+    - "~/Documents/MyNotes"
 
 github_stars:
   enabled: false

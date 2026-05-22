@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-import json
-
 from jinja2 import Environment, FileSystemLoader
 
-from passive_agent.actions.base import ActionResult
 from passive_agent.actions.ignore import IgnoreAction
 from passive_agent.actions.interview_card import InterviewCardAction
 from passive_agent.actions.mark_read import MarkReadAction
