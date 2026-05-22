@@ -106,9 +106,8 @@ class CallbackHandler:
         return {"type": "new_message", "card": card}
 
     async def _handle_ignore(self, item_id: str) -> dict | None:
-        handler = IgnoreAction(self.db)
+        handler = IgnoreAction(self.db, self.config.scoring.negative_feedback)
         result = await handler.execute(item_id)
-        # 返回 toast 提示，不发新消息
         return {"type": "toast", "text": result.message}
 
     async def _handle_weekend(self, item_id: str) -> dict | None:

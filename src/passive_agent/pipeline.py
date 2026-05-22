@@ -9,6 +9,7 @@ from passive_agent.collectors.obsidian import ObsidianCollector
 from passive_agent.collectors.zotero import ZoteroCollector
 from passive_agent.integrations.deepseek import DeepSeekClient
 from passive_agent.processors.deduplicator import Deduplicator
+from passive_agent.processors.feedback_engine import FeedbackEngine
 from passive_agent.processors.normalizer import Normalizer
 from passive_agent.processors.ranker import Ranker
 from passive_agent.processors.scorer import Scorer
@@ -59,6 +60,10 @@ class DailyPipeline:
         log.info("Starting daily pipeline...")
         errors: list[str] = []
         raw_items: list[RawItem] = []
+
+        # 0. 权重自然恢复
+        feedback_engine = FeedbackEngine(self.db, self.config.scoring.negative_feedback)
+        feedback_engine.recover_weights()
 
         # 1. Collect
         collectors = self._init_collectors()

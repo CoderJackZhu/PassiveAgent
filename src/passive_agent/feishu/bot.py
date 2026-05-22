@@ -152,6 +152,16 @@ class FeishuBot:
         self._send_card(self.chat_id, card)
         log.info(f"Daily card sent to chat {self.chat_id}")
 
+    def send_weekend_card(self, items: list[EnrichedItem]):
+        """发送周末阅读推荐卡片"""
+        if not self.chat_id:
+            log.warning("FEISHU_CHAT_ID not set, skipping weekend push")
+            return
+
+        card = CardBuilder.build_weekend_card(items)
+        self._send_card(self.chat_id, card)
+        log.info(f"Weekend card sent to chat {self.chat_id} ({len(items)} items)")
+
     def send_error_notification(self, error: str):
         """发送错误通知"""
         if not self.chat_id:

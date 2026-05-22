@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.passive-agent.serve</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin/passive-agent</string>
+        <string>serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/zhuyijie/Documents/Code/PassiveAgent</string>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/serve_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/zhuyijie/Documents/Code/PassiveAgent/data/reports/serve_stderr.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/zhuyijie/Documents/Code/PassiveAgent/.venv/bin</string>
+    </dict>
+</dict>
+</plist>

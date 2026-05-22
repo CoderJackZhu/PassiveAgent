@@ -121,6 +121,40 @@ class CardBuilder:
             "elements": [{"tag": "markdown", "content": message}],
         }
 
+    @staticmethod
+    def build_weekend_card(items: list[EnrichedItem]) -> dict:
+        elements = []
+
+        for i, enriched in enumerate(items, 1):
+            item = enriched.item
+            elements.append({
+                "tag": "markdown",
+                "content": (
+                    f"**{i}. {item.title}**\n"
+                    f"预计 {item.estimated_minutes or '?'} 分钟 · "
+                    f"{item.interview_relevance or '待分析'}"
+                ),
+            })
+            elements.append({
+                "tag": "action",
+                "actions": [
+                    _button("展开", "primary", {"action": "expand", "item_id": item.id}),
+                    _button("面试卡", "primary", {"action": "card", "item_id": item.id}),
+                    _button("忽略", "danger", {"action": "ignore", "item_id": item.id}),
+                ],
+            })
+            if i < len(items):
+                elements.append({"tag": "hr"})
+
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": f"周末阅读 · {len(items)} 篇"},
+                "template": "purple",
+            },
+            "elements": elements,
+        }
+
 
 def _button(text: str, btn_type: str, value: dict) -> dict:
     return {

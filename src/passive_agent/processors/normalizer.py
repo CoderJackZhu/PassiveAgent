@@ -29,7 +29,7 @@ class Normalizer:
                 zotero_key=raw.zotero_key,
                 collected_at=now,
                 content_type=None,
-                topics=raw.metadata.get("tags", []),
+                topics=raw.metadata.get("tags") or raw.metadata.get("topics") or [],
                 stage="new",
                 raw_text=raw.raw_text,
                 created_at=now,

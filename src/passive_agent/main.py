@@ -205,5 +205,69 @@ def action(ctx, item_id: str, action_type: str):
         db.close()
 
 
+@cli.command("weekend-push")
+@click.pass_context
+def weekend_push(ctx):
+    """推送周末队列到飞书"""
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        items = db.get_weekend_queue()
+        if not items:
+            click.echo("周末队列为空，无需推送。")
+            return
+
+        feishu_bot = None
+        if os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"):
+            from passive_agent.feishu.bot import FeishuBot
+            feishu_bot = FeishuBot(config, db)
+
+        if not feishu_bot:
+            click.echo("Error: Feishu Bot not configured", err=True)
+            raise SystemExit(1)
+
+        from passive_agent.storage.models import EnrichedItem
+        enriched = [EnrichedItem(item=item, related_zotero=[], related_stars=[]) for item in items]
+        feishu_bot.send_weekend_card(enriched)
+        click.echo(f"已推送 {len(items)} 条周末阅读材料。")
+    finally:
+        db.close()
+
+
+@cli.command("init-stars")
+@click.option("--max-pages", default=10, help="最多获取的页数 (每页100个)")
+@click.pass_context
+def init_stars(ctx, max_pages: int):
+    """一次性导入 GitHub Stars 并分类"""
+    import asyncio
+
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        click.echo("Error: GITHUB_TOKEN not set", err=True)
+        raise SystemExit(1)
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
+        raise SystemExit(1)
+
+    try:
+        from passive_agent.collectors.github_stars import GitHubStarsInitializer
+        from passive_agent.integrations.deepseek import DeepSeekClient
+
+        llm = DeepSeekClient(api_key=api_key)
+        initializer = GitHubStarsInitializer(token, db, llm)
+        count = asyncio.run(initializer.run(max_pages=max_pages))
+        click.echo(f"Done. Imported {count} relevant repos from GitHub Stars.")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     cli()

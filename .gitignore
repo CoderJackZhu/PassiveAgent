@@ -16,3 +16,6 @@ data/*.db-wal
 data/backups/
 data/raw/
 data/reports/
+
+# Environment
+.env

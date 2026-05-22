@@ -160,6 +160,12 @@ class Database:
         rows = self.conn.execute("SELECT * FROM items WHERE stage = ?", (stage,)).fetchall()
         return [Item.from_row(dict(r)) for r in rows]
 
+    def get_weekend_queue(self) -> list[Item]:
+        rows = self.conn.execute(
+            "SELECT * FROM items WHERE is_weekend = 1 AND stage NOT IN ('archived', 'ignored')"
+        ).fetchall()
+        return [Item.from_row(dict(r)) for r in rows]
+
     def get_all_titles(self) -> set[str]:
         rows = self.conn.execute("SELECT title FROM items").fetchall()
         return {r["title"] for r in rows}
@@ -275,6 +281,26 @@ class Database:
             (source, weight, datetime.now().isoformat(), weight, datetime.now().isoformat()),
         )
         self.conn.commit()
+
+    def recover_stale_weights(self, days: int = 30, rate: float = 0.05):
+        """Recover weights that haven't been updated in `days` days towards 1.0"""
+        cutoff = (datetime.now() - __import__("datetime").timedelta(days=days)).isoformat()
+
+        rows = self.conn.execute(
+            "SELECT topic, weight FROM topic_weights WHERE weight < 1.0 AND last_updated_at < ?",
+            (cutoff,),
+        ).fetchall()
+        for r in rows:
+            new_weight = min(r["weight"] + rate, 1.0)
+            self.set_topic_weight(r["topic"], new_weight)
+
+        rows = self.conn.execute(
+            "SELECT source, weight FROM source_weights WHERE weight < 1.0 AND last_updated_at < ?",
+            (cutoff,),
+        ).fetchall()
+        for r in rows:
+            new_weight = min(r["weight"] + rate, 1.0)
+            self.set_source_weight(r["source"], new_weight)
 
     # --- Daily Log ---
 
