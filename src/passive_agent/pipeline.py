@@ -75,7 +75,9 @@ class DailyPipeline:
 
         for collector in collectors:
             if not collector.is_available():
-                log.info(f"{collector.__class__.__name__}: not available, skipping")
+                path = getattr(collector, "inbox_path", None) or getattr(collector, "db_path", None)
+                detail = f" ({path})" if path else ""
+                log.info(f"{collector.__class__.__name__}: not available{detail}, skipping")
                 continue
             try:
                 items = await collector.collect()

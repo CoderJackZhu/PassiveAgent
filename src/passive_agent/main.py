@@ -8,6 +8,28 @@ from passive_agent.utils.config import load_config
 from passive_agent.utils.logger import log
 
 
+def _missing_env(names: list[str]) -> list[str]:
+    return [name for name in names if not os.environ.get(name)]
+
+
+def _init_feishu_bot(config, db, llm=None, *, require_chat_id: bool = False):
+    required = ["FEISHU_APP_ID", "FEISHU_APP_SECRET"]
+    if require_chat_id:
+        required.append("FEISHU_CHAT_ID")
+
+    missing = _missing_env(required)
+    if missing:
+        log.warning(f"Feishu disabled, missing env: {', '.join(missing)}")
+        return None
+
+    try:
+        from passive_agent.feishu.bot import FeishuBot
+        return FeishuBot(config, db, llm)
+    except Exception as e:
+        log.warning(f"Feishu Bot init failed (push disabled): {e}")
+        return None
+
+
 @click.group()
 @click.option("--config-dir", default="config", help="配置文件目录")
 @click.pass_context
@@ -36,13 +58,7 @@ def daily(ctx):
         log.warning("DEEPSEEK_API_KEY not set, running without LLM (collect only)")
 
     # 飞书推送（可选）
-    feishu_bot = None
-    if os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"):
-        try:
-            from passive_agent.feishu.bot import FeishuBot
-            feishu_bot = FeishuBot(config, db, llm)
-        except Exception as e:
-            log.warning(f"Feishu Bot init failed (push disabled): {e}")
+    feishu_bot = _init_feishu_bot(config, db, llm, require_chat_id=True)
 
     try:
         pipeline = DailyPipeline(config, db, llm, feishu_bot=feishu_bot)
@@ -130,14 +146,16 @@ def serve(ctx):
     from passive_agent.integrations.deepseek import DeepSeekClient
     llm = DeepSeekClient(api_key=api_key)
 
+    missing = _missing_env(["FEISHU_APP_ID", "FEISHU_APP_SECRET"])
+    if missing:
+        click.echo(f"Error: missing env: {', '.join(missing)}", err=True)
+        click.echo("Set FEISHU_APP_ID and FEISHU_APP_SECRET environment variables.")
+        raise SystemExit(1)
+
     try:
         from passive_agent.feishu.bot import FeishuBot
         bot = FeishuBot(config, db, llm)
         bot.start()
-    except ValueError as e:
-        click.echo(f"Error: {e}", err=True)
-        click.echo("Set FEISHU_APP_ID and FEISHU_APP_SECRET environment variables.")
-        raise SystemExit(1)
     except KeyboardInterrupt:
         log.info("Bot stopped.")
     finally:
@@ -256,10 +274,7 @@ def weekend_push(ctx):
             click.echo("周末队列为空，无需推送。")
             return
 
-        feishu_bot = None
-        if os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"):
-            from passive_agent.feishu.bot import FeishuBot
-            feishu_bot = FeishuBot(config, db)
+        feishu_bot = _init_feishu_bot(config, db, require_chat_id=True)
 
         if not feishu_bot:
             click.echo("Error: Feishu Bot not configured", err=True)
@@ -267,8 +282,42 @@ def weekend_push(ctx):
 
         from passive_agent.storage.models import EnrichedItem
         enriched = [EnrichedItem(item=item, related_zotero=[], related_stars=[]) for item in items]
-        feishu_bot.send_weekend_card(enriched)
+        if not feishu_bot.send_weekend_card(enriched):
+            click.echo("Error: Feishu weekend push failed", err=True)
+            raise SystemExit(1)
         click.echo(f"已推送 {len(items)} 条周末阅读材料。")
+    finally:
+        db.close()
+
+
+@cli.command("feishu-push")
+@click.option("--stage", default="recommended", help="推送指定 stage 的条目")
+@click.option("--limit", default=5, help="最多推送条数")
+@click.pass_context
+def feishu_push(ctx, stage: str, limit: int):
+    """手动推送当前条目到飞书，用于验证飞书配置"""
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        items = db.get_items_by_stage(stage)[:limit]
+        if not items:
+            click.echo(f"No items with stage '{stage}'")
+            return
+
+        feishu_bot = _init_feishu_bot(config, db, require_chat_id=True)
+        if not feishu_bot:
+            click.echo("Error: Feishu Bot not configured", err=True)
+            raise SystemExit(1)
+
+        from passive_agent.storage.models import EnrichedItem
+        enriched = [EnrichedItem(item=item, related_zotero=[], related_stars=[]) for item in items]
+        if not feishu_bot.send_daily_card(enriched):
+            click.echo("Error: Feishu push failed", err=True)
+            raise SystemExit(1)
+
+        click.echo(f"已推送 {len(items)} 条 {stage} 条目。")
     finally:
         db.close()
 

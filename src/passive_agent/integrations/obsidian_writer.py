@@ -5,7 +5,10 @@ from pathlib import Path
 
 class ObsidianWriter:
     def __init__(self, vault_path: str):
+        if not vault_path:
+            raise ValueError("vault_path is required")
         self.vault = Path(vault_path).expanduser()
+        self.vault.mkdir(parents=True, exist_ok=True)
 
     def write_interview_card(self, topic: str, title: str, content: str) -> Path:
         dir_path = self.vault / "01-Interview" / self._safe_dirname(topic)

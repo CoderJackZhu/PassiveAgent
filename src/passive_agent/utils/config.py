@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 
 import yaml
@@ -83,12 +84,15 @@ class AppConfig:
 
 def load_config(config_dir: str = "config") -> AppConfig:
     config_path = Path(config_dir)
-
     unified = _load_yaml(config_path / "config.yaml")
+    project_root = config_path.resolve()
     if not unified:
         unified = _load_yaml(config_path.parent / "config.yaml")
+        project_root = config_path.parent.resolve()
     if not unified:
         unified = {}
+
+    _load_env_file(project_root / ".env")
 
     goals_data = unified.get("goals", {})
     sources_data = unified.get("sources", {})
@@ -104,6 +108,7 @@ def load_config(config_dir: str = "config") -> AppConfig:
     zotero_raw = sources_data.get("zotero", {})
     obsidian_raw = sources_data.get("obsidian", {})
     github_raw = sources_data.get("github_stars", {})
+    default_obsidian = ObsidianSourceConfig()
 
     sources = SourcesConfig(
         zotero=ZoteroSourceConfig(
@@ -115,8 +120,8 @@ def load_config(config_dir: str = "config") -> AppConfig:
         ),
         obsidian=ObsidianSourceConfig(
             enabled=obsidian_raw.get("enabled", True),
-            inbox_path=obsidian_raw.get("inbox_path", ""),
-            vault_path=obsidian_raw.get("vault_path", ""),
+            inbox_path=obsidian_raw.get("inbox_path") or default_obsidian.inbox_path,
+            vault_path=obsidian_raw.get("vault_path") or default_obsidian.vault_path,
             read_paths=_as_list(obsidian_raw.get("read_paths", obsidian_raw.get("read_path", []))),
         ),
         github_stars=GitHubStarsConfig(
@@ -135,7 +140,7 @@ def load_config(config_dir: str = "config") -> AppConfig:
     )
 
     return AppConfig(goals=goals, sources=sources, scoring=scoring,
-                     project_root=str(config_path.resolve().parent))
+                     project_root=str(project_root))
 
 
 def _load_yaml(path: Path) -> dict:
@@ -149,3 +154,28 @@ def _as_list(val) -> list[str]:
     if isinstance(val, str):
         return [val] if val else []
     return val or []
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        if not key or key in os.environ:
+            continue
+
+        value = value.strip()
+        if "#" in value and not value.startswith(("'", '"')):
+            value = value.split("#", 1)[0].rstrip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+
+        os.environ[key] = value

@@ -9,16 +9,17 @@ from passive_agent.utils.logger import log
 
 class ObsidianCollector:
     def __init__(self, inbox_path: str):
-        self.inbox_path = Path(inbox_path).expanduser()
+        self.inbox_path = Path(inbox_path).expanduser() if inbox_path else None
 
     def is_available(self) -> bool:
-        return self.inbox_path.exists()
+        return self._ensure_inbox_file()
 
     async def collect(self) -> list[RawItem]:
         if not self.is_available():
-            log.warning(f"Obsidian inbox not found: {self.inbox_path}")
+            log.warning(f"Obsidian inbox not available: {self.inbox_path}")
             return []
 
+        assert self.inbox_path is not None
         content = self.inbox_path.read_text(encoding="utf-8")
         items = []
 
@@ -57,3 +58,19 @@ class ObsidianCollector:
 
         log.info(f"Obsidian inbox: collected {len(items)} items")
         return items
+
+    def _ensure_inbox_file(self) -> bool:
+        if self.inbox_path is None:
+            log.warning("Obsidian inbox_path is empty")
+            return False
+
+        if self.inbox_path.exists():
+            if self.inbox_path.is_file():
+                return True
+            log.warning(f"Obsidian inbox path is not a file: {self.inbox_path}")
+            return False
+
+        self.inbox_path.parent.mkdir(parents=True, exist_ok=True)
+        self.inbox_path.touch()
+        log.info(f"Created Obsidian inbox file: {self.inbox_path}")
+        return True

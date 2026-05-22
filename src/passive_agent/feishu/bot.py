@@ -122,11 +122,7 @@ class FeishuBot:
                 return None
 
             if result["type"] == "toast":
-                resp = P2CardActionTriggerResponse()
-                resp.toast = CallBackToast()
-                resp.toast.type = "info"
-                resp.toast.content = result["text"]
-                return resp
+                return self._toast(result["text"])
             elif result["type"] == "new_message":
                 chat_id = open_chat_id or self.chat_id
                 if chat_id:
@@ -135,31 +131,35 @@ class FeishuBot:
 
         except Exception as e:
             log.error(f"Error handling card action: {e}")
-            return None
+            return self._toast(f"处理失败：{e}", toast_type="error")
 
-    def send_daily_card(self, items: list[EnrichedItem]):
+    def send_daily_card(self, items: list[EnrichedItem]) -> bool:
         """发送每日推荐卡片"""
         if not self.chat_id:
             log.warning("FEISHU_CHAT_ID not set, skipping push")
-            return
+            return False
 
         if self.command_handler.is_paused:
             log.info("Push is paused, skipping")
-            return
+            return False
 
         card = CardBuilder.build_daily_card(items)
-        self._send_card(self.chat_id, card)
-        log.info(f"Daily card sent to chat {self.chat_id}")
+        if self._send_card(self.chat_id, card):
+            log.info(f"Daily card sent to chat {self.chat_id}")
+            return True
+        return False
 
-    def send_weekend_card(self, items: list[EnrichedItem]):
+    def send_weekend_card(self, items: list[EnrichedItem]) -> bool:
         """发送周末阅读推荐卡片"""
         if not self.chat_id:
             log.warning("FEISHU_CHAT_ID not set, skipping weekend push")
-            return
+            return False
 
         card = CardBuilder.build_weekend_card(items)
-        self._send_card(self.chat_id, card)
-        log.info(f"Weekend card sent to chat {self.chat_id} ({len(items)} items)")
+        if self._send_card(self.chat_id, card):
+            log.info(f"Weekend card sent to chat {self.chat_id} ({len(items)} items)")
+            return True
+        return False
 
     def send_error_notification(self, error: str):
         """发送错误通知"""
@@ -173,7 +173,7 @@ class FeishuBot:
         )
         self._send_card(self.chat_id, card)
 
-    def _send_card(self, chat_id: str, card: dict):
+    def _send_card(self, chat_id: str, card: dict) -> bool:
         """发送卡片消息"""
         request = CreateMessageRequest.builder() \
             .receive_id_type("chat_id") \
@@ -188,6 +188,8 @@ class FeishuBot:
         response = self.client.im.v1.message.create(request)
         if not response.success():
             log.error(f"Failed to send card: {response.code} - {response.msg}")
+            return False
+        return True
 
     def _reply_text(self, chat_id: str, text: str):
         """回复文本消息"""
@@ -204,3 +206,10 @@ class FeishuBot:
         response = self.client.im.v1.message.create(request)
         if not response.success():
             log.error(f"Failed to reply: {response.code} - {response.msg}")
+
+    def _toast(self, text: str, toast_type: str = "info") -> P2CardActionTriggerResponse:
+        resp = P2CardActionTriggerResponse()
+        resp.toast = CallBackToast()
+        resp.toast.type = toast_type
+        resp.toast.content = text
+        return resp

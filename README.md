@@ -32,6 +32,8 @@ cd PassiveAgent
 uv sync
 ```
 
+`uv sync` 会把 CLI 安装到项目虚拟环境中。后续命令建议使用 `uv run passive-agent ...`；如果想直接运行 `passive-agent ...`，需要先执行 `source .venv/bin/activate`。
+
 ### 2. 配置
 
 复制示例配置并按需修改：
@@ -48,18 +50,19 @@ export GITHUB_TOKEN="your-token"            # GitHub Stars 导入（可选）
 export ZOTERO_API_KEY="your-key"            # Zotero tag 回写（可选）
 export FEISHU_APP_ID="your-app-id"          # 飞书推送（可选）
 export FEISHU_APP_SECRET="your-secret"      # 飞书推送（可选）
+export FEISHU_CHAT_ID="your-chat-id"        # 主动推送目标会话（daily/weekend 必需）
 ```
 
 ### 4. 初始化
 
 ```bash
-passive-agent init-db
+uv run passive-agent init-db
 ```
 
 ### 5. 运行每日 pipeline
 
 ```bash
-passive-agent daily
+uv run passive-agent daily
 ```
 
 ## CLI 命令
@@ -75,9 +78,20 @@ passive-agent daily
 | `export-stars [--output path]` | 导出 Stars 为 Markdown |
 | `weekly-report` | 生成本周周报 |
 | `weekend-push` | 推送周末阅读队列 |
+| `feishu-push [--stage recommended]` | 手动推送当前条目到飞书，用于验证配置 |
 | `zotero-writeback [--execute]` | Zotero tag 回写（默认 dry-run） |
 | `serve` | 启动飞书 Bot 长连接服务 |
 | `init-db` | 初始化数据库 |
+
+飞书说明：`daily` 和 `weekend-push` 是一次性主动推送，必须设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID`。`serve` 是飞书长连接服务，用于接收消息和处理卡片按钮，需要单独常驻运行。
+
+可先用以下命令验证飞书配置是否能发消息：
+
+```bash
+uv run passive-agent feishu-push --stage recommended --limit 5
+```
+
+获取 `FEISHU_CHAT_ID`：先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY`，运行 `uv run passive-agent serve`，然后在飞书里给机器人发一条消息；日志会输出 `Auto-detected chat_id: ...`，把这个值写入 `FEISHU_CHAT_ID`。
 
 ## 用户操作
 
@@ -96,8 +110,8 @@ passive-agent daily
 示例：
 
 ```bash
-passive-agent action item_20260522_001 --type card
-passive-agent action item_20260522_002 --type weekend
+uv run passive-agent action item_20260522_001 --type card
+uv run passive-agent action item_20260522_002 --type weekend
 ```
 
 ## 数据源配置
@@ -132,10 +146,10 @@ scoring:
 GitHub Stars 用法：
 
 ```bash
-GITHUB_TOKEN=xxx passive-agent init-stars        # 首次导入
-GITHUB_TOKEN=xxx passive-agent init-stars --refresh  # 刷新元数据
-passive-agent list-stars --topic Agent --sort stars  # 查看
-passive-agent export-stars                           # 导出 Markdown
+GITHUB_TOKEN=xxx uv run passive-agent init-stars            # 首次导入
+GITHUB_TOKEN=xxx uv run passive-agent init-stars --refresh  # 刷新元数据
+uv run passive-agent list-stars --topic Agent --sort stars  # 查看
+uv run passive-agent export-stars                           # 导出 Markdown
 ```
 
 ## 评分机制
@@ -208,6 +222,12 @@ passive-agent-workbench/
     <dict>
         <key>DEEPSEEK_API_KEY</key>
         <string>your-key</string>
+        <key>FEISHU_APP_ID</key>
+        <string>your-app-id</string>
+        <key>FEISHU_APP_SECRET</key>
+        <string>your-secret</string>
+        <key>FEISHU_CHAT_ID</key>
+        <string>your-chat-id</string>
     </dict>
 </dict>
 </plist>
@@ -218,6 +238,8 @@ passive-agent-workbench/
 ```bash
 launchctl load ~/Library/LaunchAgents/com.passive-agent.daily.plist
 ```
+
+如果使用 `scripts/install_launchd.sh` 安装 plist，注意 launchd 不会自动继承当前终端里的 `export`。可用 `launchctl setenv FEISHU_CHAT_ID "..."` 等命令写入用户级环境，或在安装后的 plist 中配置 `EnvironmentVariables`。
 
 ## 技术栈
 

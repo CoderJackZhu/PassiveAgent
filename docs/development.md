@@ -17,7 +17,7 @@ pip install -e ".[dev]"
 ## 运行测试
 
 ```bash
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ## 项目约定

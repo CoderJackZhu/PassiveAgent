@@ -61,6 +61,8 @@ obsidian:
 - `read_paths`：只读搜索目录，用于"关联笔记"功能，不会被修改
 - `inbox_path`：独立的采集入口，与 read_paths 无关
 
+如果 `vault_path` 或 `inbox_path` 的父目录不存在，系统会自动创建目录；如果 `inbox_path` 文件不存在，会自动创建一个空的 `inbox.md`。
+
 **inbox.md 格式**：
 
 ```markdown
@@ -138,5 +140,10 @@ scoring:
 | `ZOTERO_API_KEY` | 否 | Zotero tag 回写 |
 | `FEISHU_APP_ID` | 否 | 飞书 Bot 推送 |
 | `FEISHU_APP_SECRET` | 否 | 飞书 Bot 推送 |
+| `FEISHU_CHAT_ID` | 主动推送时必需 | `daily` / `weekend-push` 的目标会话 ID |
 
 建议在 `~/.zshrc` 或 `.env` 中配置（`.env` 已被 gitignore）。
+
+如果通过 launchd 定时运行，当前终端中的 `export` 不会自动传给任务。请使用 `launchctl setenv` 设置用户级环境变量，或在 plist 的 `EnvironmentVariables` 中写入 `DEEPSEEK_API_KEY`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_CHAT_ID`。
+
+获取 `FEISHU_CHAT_ID`：运行 `uv run passive-agent serve`，在飞书中给机器人发一条消息，终端日志会输出 `Auto-detected chat_id: ...`。主动推送不要求 `serve` 正在运行，但卡片按钮和消息命令需要 `serve` 常驻。

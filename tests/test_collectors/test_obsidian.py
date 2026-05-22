@@ -50,8 +50,19 @@ def test_obsidian_collector_skips_done(inbox_file):
     assert "已处理的条目" not in titles
 
 
-def test_obsidian_collector_not_available(tmp_path):
-    collector = ObsidianCollector(inbox_path=str(tmp_path / "nonexistent.md"))
+def test_obsidian_collector_creates_missing_inbox(tmp_path):
+    inbox = tmp_path / "missing" / "inbox.md"
+    collector = ObsidianCollector(inbox_path=str(inbox))
+    assert collector.is_available()
+    assert inbox.exists()
+    assert inbox.is_file()
+
+    items = asyncio.run(collector.collect())
+    assert items == []
+
+
+def test_obsidian_collector_empty_path_not_available():
+    collector = ObsidianCollector(inbox_path="")
     assert not collector.is_available()
     items = asyncio.run(collector.collect())
     assert items == []

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from jinja2 import Environment, FileSystemLoader
 
 from passive_agent.actions.ignore import IgnoreAction
@@ -17,12 +19,13 @@ from passive_agent.utils.logger import log
 class CallbackHandler:
     """处理飞书卡片按钮回调"""
 
-    def __init__(self, config: AppConfig, db: Database, llm: DeepSeekClient):
+    def __init__(self, config: AppConfig, db: Database, llm: DeepSeekClient | None):
         self.config = config
         self.db = db
         self.llm = llm
         self.writer = ObsidianWriter(config.sources.obsidian.vault_path)
-        self.jinja = Environment(loader=FileSystemLoader(config.prompts_dir))
+        self.prompts_dir = str(Path(config.project_root) / config.prompts_dir) if config.project_root else config.prompts_dir
+        self.jinja = Environment(loader=FileSystemLoader(self.prompts_dir))
 
     async def handle(self, action_value: dict) -> dict | None:
         action = action_value.get("action")
@@ -55,6 +58,9 @@ class CallbackHandler:
             return None
 
     async def _handle_expand(self, item_id: str) -> dict | None:
+        if self.llm is None:
+            return {"type": "toast", "text": "LLM 未配置，无法展开"}
+
         item = self.db.get_item(item_id)
         if not item:
             return None
@@ -77,7 +83,10 @@ class CallbackHandler:
         return {"type": "new_message", "card": card}
 
     async def _handle_card(self, item_id: str) -> dict | None:
-        handler = InterviewCardAction(self.db, self.llm, self.writer, self.config.goals)
+        if self.llm is None:
+            return {"type": "toast", "text": "LLM 未配置，无法生成面试卡"}
+
+        handler = InterviewCardAction(self.db, self.llm, self.writer, self.config.goals, self.prompts_dir)
         result = await handler.execute(item_id)
 
         if result.success:
@@ -92,7 +101,10 @@ class CallbackHandler:
         return {"type": "new_message", "card": card}
 
     async def _handle_note(self, item_id: str) -> dict | None:
-        handler = TechNoteAction(self.db, self.llm, self.writer, self.config.goals)
+        if self.llm is None:
+            return {"type": "toast", "text": "LLM 未配置，无法生成技术笔记"}
+
+        handler = TechNoteAction(self.db, self.llm, self.writer, self.config.goals, self.prompts_dir)
         result = await handler.execute(item_id)
 
         if result.success:
