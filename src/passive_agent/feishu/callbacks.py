@@ -133,7 +133,7 @@ class CallbackHandler:
 
     async def _handle_link(self, item_id: str) -> dict | None:
         from passive_agent.actions.link_notes import LinkNotesAction
-        handler = LinkNotesAction(self.db, self.writer)
+        handler = LinkNotesAction(self.db, self.writer, self.config.sources.obsidian.read_paths)
         result = await handler.execute(item_id)
         if result.success and "未找到" not in result.message:
             card = CardBuilder.build_result_card("关联笔记", result.message)

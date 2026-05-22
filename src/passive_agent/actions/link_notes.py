@@ -9,11 +9,12 @@ from passive_agent.utils.logger import log
 
 
 class LinkNotesAction:
-    """搜索 Obsidian vault 中与当前 item 相关的已有笔记"""
+    """搜索 Obsidian vault 和 read_paths 中与当前 item 相关的已有笔记"""
 
-    def __init__(self, db: Database, writer: ObsidianWriter):
+    def __init__(self, db: Database, writer: ObsidianWriter, read_paths: list[str] | None = None):
         self.db = db
         self.vault = writer.vault
+        self.read_paths = [Path(p).expanduser() for p in (read_paths or [])]
 
     async def execute(self, item_id: str) -> ActionResult:
         item = self.db.get_item(item_id)
@@ -31,7 +32,10 @@ class LinkNotesAction:
 
         lines = [f"与「{item.title[:30]}」相关的笔记："]
         for path, score in matches[:5]:
-            rel = path.relative_to(self.vault)
+            try:
+                rel = path.relative_to(self.vault)
+            except ValueError:
+                rel = path.name
             lines.append(f"  · {rel} (匹配 {score} 个关键词)")
 
         message = "\n".join(lines)
@@ -46,13 +50,23 @@ class LinkNotesAction:
 
     def _search_vault(self, keywords: list[str]) -> list[tuple[Path, int]]:
         results: list[tuple[Path, int]] = []
-        search_dirs = ["01-Interview", "03-Tech-Notes", "03-Source-Notes"]
 
+        # Search output vault subdirs
+        search_dirs = ["01-Interview", "03-Tech-Notes", "03-Source-Notes"]
         for dir_name in search_dirs:
             search_path = self.vault / dir_name
             if not search_path.exists():
                 continue
             for md_file in search_path.rglob("*.md"):
+                score = self._match_score(md_file, keywords)
+                if score > 0:
+                    results.append((md_file, score))
+
+        # Search read_paths (input vaults)
+        for rp in self.read_paths:
+            if not rp.exists():
+                continue
+            for md_file in rp.rglob("*.md"):
                 score = self._match_score(md_file, keywords)
                 if score > 0:
                     results.append((md_file, score))

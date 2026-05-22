@@ -47,6 +47,7 @@ class ObsidianSourceConfig:
     enabled: bool = True
     inbox_path: str = "~/ObsidianVault/00-Inbox/inbox.md"
     vault_path: str = "~/ObsidianVault"
+    read_paths: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -110,6 +111,7 @@ def load_config(config_dir: str = "config") -> AppConfig:
             enabled=obsidian_raw.get("enabled", True),
             inbox_path=obsidian_raw.get("inbox_path", ""),
             vault_path=obsidian_raw.get("vault_path", ""),
+            read_paths=_as_list(obsidian_raw.get("read_paths", obsidian_raw.get("read_path", []))),
         ),
         github_stars=GitHubStarsConfig(
             enabled=github_raw.get("enabled", False),
@@ -135,3 +137,9 @@ def _load_yaml(path: Path) -> dict:
         return {}
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def _as_list(val) -> list[str]:
+    if isinstance(val, str):
+        return [val] if val else []
+    return val or []

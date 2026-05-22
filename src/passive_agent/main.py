@@ -207,7 +207,7 @@ def action(ctx, item_id: str, action_type: str):
             handler = IgnoreAction(db, config.scoring.negative_feedback)
         elif action_type == "link":
             from passive_agent.actions.link_notes import LinkNotesAction
-            handler = LinkNotesAction(db, writer)
+            handler = LinkNotesAction(db, writer, config.sources.obsidian.read_paths)
         elif action_type == "mute":
             from passive_agent.actions.mute_similar import MuteSimilarAction
             handler = MuteSimilarAction(db, config.scoring.negative_feedback)
