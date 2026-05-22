@@ -30,6 +30,19 @@ def _init_feishu_bot(config, db, llm=None, *, require_chat_id: bool = False):
         return None
 
 
+def _notify_daily_error(feishu_bot, result):
+    if not feishu_bot or result.status == "paused":
+        return
+    if result.status != "error" and not result.errors:
+        return
+
+    error_text = "; ".join(result.errors) if result.errors else f"Pipeline status: {result.status}"
+    try:
+        feishu_bot.send_error_notification(error_text)
+    except Exception as e:
+        log.warning(f"Feishu error notification failed: {e}")
+
+
 @click.group()
 @click.option("--config-dir", default="config", help="配置文件目录")
 @click.pass_context
@@ -68,11 +81,15 @@ def daily(ctx):
             log.info("No new items to process today.")
         elif result.status == "all_duplicates":
             log.info(f"Collected {result.collected} items, all duplicates.")
+        elif result.status == "paused":
+            log.info("Daily pipeline paused; collection and push skipped.")
         elif result.status == "success":
             log.info(f"Done. Collected {result.collected}, processed {result.processed}, "
-                     f"recommended {len(result.recommended)} items.")
+                     f"recommended {len(result.recommended)} items, pushed {result.pushed}.")
         elif result.status == "error":
             log.error(f"Pipeline failed: {result.errors}")
+
+        _notify_daily_error(feishu_bot, result)
     finally:
         db.close()
 
@@ -119,11 +136,13 @@ def status(ctx):
         recommended_count = len(db.get_items_by_stage("recommended"))
         archived_count = len(db.get_items_by_stage("archived"))
         ignored_count = len(db.get_items_by_stage("ignored"))
+        stale_count = len(db.get_items_by_stage("stale"))
 
         click.echo("Passive Agent Status:")
         click.echo(f"  New:         {new_count}")
         click.echo(f"  Summarized:  {summarized_count}")
         click.echo(f"  Recommended: {recommended_count}")
+        click.echo(f"  Stale:       {stale_count}")
         click.echo(f"  Archived:    {archived_count}")
         click.echo(f"  Ignored:     {ignored_count}")
     finally:
@@ -313,7 +332,7 @@ def feishu_push(ctx, stage: str, limit: int):
 
         from passive_agent.storage.models import EnrichedItem
         enriched = [EnrichedItem(item=item, related_zotero=[], related_stars=[]) for item in items]
-        if not feishu_bot.send_daily_card(enriched):
+        if not feishu_bot.send_daily_card(enriched, respect_pause=False):
             click.echo("Error: Feishu push failed", err=True)
             raise SystemExit(1)
 

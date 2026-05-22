@@ -18,11 +18,9 @@ class CommandHandler:
 
     def __init__(self, db: Database):
         self.db = db
-        self._paused = False
 
-    @property
     def is_paused(self) -> bool:
-        return self._paused
+        return self.db.is_paused()
 
     async def handle(self, text: str) -> str | None:
         text = text.strip()
@@ -37,6 +35,7 @@ class CommandHandler:
         archived = self.db.get_items_by_stage("archived")
         ignored = self.db.get_items_by_stage("ignored")
         recommended = self.db.get_items_by_stage("recommended")
+        stale = self.db.get_items_by_stage("stale")
 
         cards = [i for i in archived if i.actioned_at]
         return (
@@ -44,6 +43,7 @@ class CommandHandler:
             f"- 已处理：{len(archived)} 条\n"
             f"- 已忽略：{len(ignored)} 条\n"
             f"- 待处理：{len(recommended)} 条\n"
+            f"- 已过期推荐：{len(stale)} 条\n"
             f"- 生成卡片/笔记：{len(cards)} 张"
         )
 
@@ -71,22 +71,23 @@ class CommandHandler:
 
     async def _cmd_status(self) -> str:
         stages = {}
-        for stage in ("new", "summarized", "recommended", "archived", "ignored"):
+        for stage in ("new", "summarized", "recommended", "stale", "archived", "ignored"):
             stages[stage] = len(self.db.get_items_by_stage(stage))
 
-        paused_text = " (已暂停推送)" if self._paused else ""
+        paused_text = " (已暂停推送)" if self.is_paused() else ""
         return (
             f"系统状态{paused_text}：\n"
             f"  待处理：{stages['new'] + stages['summarized']}\n"
             f"  今日推荐：{stages['recommended']}\n"
+            f"  已过期推荐：{stages['stale']}\n"
             f"  已归档：{stages['archived']}\n"
             f"  已忽略：{stages['ignored']}"
         )
 
     async def _cmd_pause(self) -> str:
-        self._paused = True
+        self.db.set_paused(True)
         return "已暂停每日推送。发送「恢复」重新启用。"
 
     async def _cmd_resume(self) -> str:
-        self._paused = False
+        self.db.set_paused(False)
         return "已恢复每日推送。"

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from passive_agent.storage.models import FeedbackRecord, Item, Score
 from passive_agent.utils.logger import log
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS items (
@@ -77,9 +77,16 @@ CREATE TABLE IF NOT EXISTS daily_log (
     collected_count INTEGER DEFAULT 0,
     processed_count INTEGER DEFAULT 0,
     pushed_count INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'success',
     user_actions TEXT,
     errors TEXT,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS zotero_write_queue (
@@ -129,6 +136,11 @@ class Database:
             if current_version < 3:
                 try:
                     self.conn.execute("ALTER TABLE items ADD COLUMN extra_meta TEXT")
+                except sqlite3.OperationalError:
+                    pass
+            if current_version < 4:
+                try:
+                    self.conn.execute("ALTER TABLE daily_log ADD COLUMN status TEXT NOT NULL DEFAULT 'success'")
                 except sqlite3.OperationalError:
                     pass
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -228,6 +240,25 @@ class Database:
             self.conn.execute("UPDATE items SET stage = ? WHERE id = ?", (stage, item_id))
         self.conn.commit()
 
+    def mark_stale_recommendations(self, days: int = 7) -> int:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        cursor = self.conn.execute(
+            """UPDATE items
+               SET stage = 'stale'
+               WHERE stage = 'recommended'
+                 AND actioned_at IS NULL
+                 AND created_at < ?""",
+            (cutoff,),
+        )
+        self.conn.commit()
+        return cursor.rowcount if cursor.rowcount is not None else 0
+
+    def count_items_by_stage(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT stage, COUNT(*) AS cnt FROM items GROUP BY stage"
+        ).fetchall()
+        return {r["stage"]: r["cnt"] for r in rows}
+
     # --- Scores ---
 
     def save_score(self, score: Score):
@@ -314,7 +345,7 @@ class Database:
 
     def recover_stale_weights(self, days: int = 30, rate: float = 0.05):
         """Recover weights that haven't been updated in `days` days towards 1.0"""
-        cutoff = (datetime.now() - __import__("datetime").timedelta(days=days)).isoformat()
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
         rows = self.conn.execute(
             "SELECT topic, weight FROM topic_weights WHERE weight < 1.0 AND last_updated_at < ?",
@@ -332,24 +363,74 @@ class Database:
             new_weight = min(r["weight"] + rate, 1.0)
             self.set_source_weight(r["source"], new_weight)
 
+    # --- App State ---
+
+    def set_app_state(self, key: str, value: str):
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            """INSERT INTO app_state (key, value, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?""",
+            (key, value, now, value, now),
+        )
+        self.conn.commit()
+
+    def get_app_state(self, key: str, default: str | None = None) -> str | None:
+        row = self.conn.execute("SELECT value FROM app_state WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_paused(self, paused: bool):
+        self.set_app_state("paused", "1" if paused else "0")
+
+    def is_paused(self) -> bool:
+        value = self.get_app_state("paused", "0")
+        return str(value).lower() in ("1", "true", "yes", "on")
+
     # --- Daily Log ---
 
     def log_daily_run(
-        self, run_date: date, collected: int, processed: int, pushed: int, errors: list[str]
+        self,
+        run_date: date,
+        collected: int,
+        processed: int,
+        pushed: int,
+        errors: list[str],
+        status: str = "success",
     ):
         self.conn.execute(
-            """INSERT OR REPLACE INTO daily_log (date, collected_count, processed_count, pushed_count, errors, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+            """INSERT OR REPLACE INTO daily_log
+               (date, collected_count, processed_count, pushed_count, status, errors, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 run_date.isoformat(),
                 collected,
                 processed,
                 pushed,
+                status,
                 json.dumps(errors, ensure_ascii=False),
                 datetime.now().isoformat(),
             ),
         )
         self.conn.commit()
+
+    def get_daily_logs_since(self, start_date: date) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT date, collected_count, processed_count, pushed_count, status, errors, created_at
+               FROM daily_log
+               WHERE date >= ?
+               ORDER BY date ASC""",
+            (start_date.isoformat(),),
+        ).fetchall()
+
+        logs = []
+        for row in rows:
+            data = dict(row)
+            try:
+                data["errors"] = json.loads(data.get("errors") or "[]")
+            except json.JSONDecodeError:
+                data["errors"] = [data.get("errors")]
+            logs.append(data)
+        return logs
 
     # --- Zotero Write Queue ---
 

@@ -35,17 +35,21 @@ class Summarizer:
         return succeeded
 
     async def _summarize_one(self, item: Item) -> Item:
-        metadata = {}
+        metadata = item.extra_meta or {}
         if hasattr(item, '_metadata'):
-            metadata = item._metadata
+            metadata = {**metadata, **item._metadata}
+
+        collections = metadata.get("collections") or ""
+        if isinstance(collections, list):
+            collections = ", ".join(str(c) for c in collections if c)
 
         prompt = self.template.render(
             title=item.title,
             source=item.source,
-            abstract=item.raw_text or "",
+            abstract=item.raw_text or metadata.get("abstract") or "",
             url=item.url or "",
             tags=", ".join(item.topics) if item.topics else "",
-            collections="",
+            collections=collections,
             priority_topics=self.goals.priority_topics,
         )
 

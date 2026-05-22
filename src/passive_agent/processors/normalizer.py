@@ -28,12 +28,14 @@ class Normalizer:
                 if c not in topics:
                     topics.append(c)
 
-            # Extract extra metadata (language, stars, etc.) for persistence
+            # Extract extra metadata (language, stars, Zotero fields, etc.) for persistence
             extra_meta = None
-            extra_keys = ("language", "stars", "github_topics")
+            extra_keys = ("language", "stars", "github_topics", "abstract", "collections", "date_added")
             extra = {k: raw.metadata[k] for k in extra_keys if k in raw.metadata}
             if extra:
                 extra_meta = extra
+
+            raw_text = raw.raw_text or raw.metadata.get("abstract")
 
             items.append(Item(
                 id=item_id,
@@ -46,7 +48,7 @@ class Normalizer:
                 content_type=None,
                 topics=topics,
                 stage="new",
-                raw_text=raw.raw_text,
+                raw_text=raw_text,
                 extra_meta=extra_meta,
                 created_at=now,
             ))

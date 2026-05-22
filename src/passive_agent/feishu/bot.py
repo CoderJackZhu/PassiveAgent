@@ -133,13 +133,13 @@ class FeishuBot:
             log.error(f"Error handling card action: {e}")
             return self._toast(f"处理失败：{e}", toast_type="error")
 
-    def send_daily_card(self, items: list[EnrichedItem]) -> bool:
+    def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
         """发送每日推荐卡片"""
         if not self.chat_id:
             log.warning("FEISHU_CHAT_ID not set, skipping push")
             return False
 
-        if self.command_handler.is_paused:
+        if respect_pause and self.db.is_paused():
             log.info("Push is paused, skipping")
             return False
 

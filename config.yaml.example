@@ -53,7 +53,7 @@ scoring:
     difficulty_fit: 0.10
     source_quality: 0.10
     timeliness: 0.10
-  daily_limit: 5            # 每日最多推送条数
+  daily_limit: 3            # 每日最多推送条数
   weekend_limit: 5          # 周末队列最大容量
   negative_feedback:
     topic_threshold: 3      # 同主题连续忽略 N 次后降权

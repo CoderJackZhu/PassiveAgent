@@ -139,7 +139,7 @@ sources:
 
 scoring:
   weights: { goal_relevance: 0.30, ... }
-  daily_limit: 5
+  daily_limit: 3
   negative_feedback: { ... }
 ```
 
@@ -191,6 +191,13 @@ passive-agent-workbench/
 ```
 
 ## 自动化部署 (macOS launchd)
+
+建议把项目放在 `~/Code`、`~/Developer` 等普通目录下再安装 launchd 服务。macOS 的
+Documents、Desktop、Downloads 受隐私权限保护，LaunchAgent 后台进程可能无法读取
+项目内的 `.venv`，表现为 `PermissionError: [Errno 1] Operation not permitted:
+.../.venv/pyvenv.cfg`。`scripts/install_launchd.sh` 会拦截这些路径并给出迁移命令；
+如已明确授予所需权限，可用 `PASSIVE_AGENT_ALLOW_TCC_PROTECTED_DIR=1
+scripts/install_launchd.sh` 覆盖。
 
 创建 `~/Library/LaunchAgents/com.passive-agent.daily.plist`：
 

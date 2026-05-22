@@ -37,7 +37,7 @@ class CardBuilder:
                 stars_text = ", ".join(enriched.related_stars[:3])
                 elements.append({
                     "tag": "markdown",
-                    "content": f"相关：你 star 过 {stars_text}",
+                    "content": f"相关 GitHub Star：{stars_text}",
                 })
 
             # 操作按钮

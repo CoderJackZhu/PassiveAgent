@@ -23,9 +23,11 @@ class Ranker:
         enriched = []
         for item in items:
             related_zotero = self._find_related_zotero(item)
+            related_stars = self._find_related_stars(item)
             enriched.append(EnrichedItem(
                 item=item,
                 related_zotero=related_zotero,
+                related_stars=related_stars,
             ))
         return enriched
 
@@ -41,6 +43,29 @@ class Ranker:
                 continue
             if any(t in existing.topics for t in item.topics):
                 related.append(existing.title)
+                if len(related) >= 3:
+                    break
+        return related
+
+    def _find_related_stars(self, item: Item) -> list[str]:
+        """Use existing imported GitHub Stars as lightweight enrichment."""
+        if not item.topics or item.source == "github_star":
+            return []
+
+        stars = self.db.get_items_by_source("github_star")
+        stars.sort(
+            key=lambda star: (
+                -int((star.extra_meta or {}).get("stars") or 0),
+                star.title.lower(),
+            )
+        )
+
+        related = []
+        for star in stars:
+            if star.id == item.id:
+                continue
+            if any(t in star.topics for t in item.topics):
+                related.append(star.title)
                 if len(related) >= 3:
                     break
         return related
