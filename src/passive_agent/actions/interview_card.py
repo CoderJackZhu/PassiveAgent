@@ -48,6 +48,9 @@ class InterviewCardAction:
 
         self.db.update_item_stage(item_id, "archived")
 
+        if item.zotero_key:
+            self.db.enqueue_zotero_write(item.zotero_key, "✓面试卡")
+
         # 标记 inbox 已处理
         if item.source == "obsidian_inbox" and item.raw_text:
             self.writer.mark_inbox_done(item.raw_text)
