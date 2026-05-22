@@ -28,6 +28,13 @@ class Normalizer:
                 if c not in topics:
                     topics.append(c)
 
+            # Extract extra metadata (language, stars, etc.) for persistence
+            extra_meta = None
+            extra_keys = ("language", "stars", "github_topics")
+            extra = {k: raw.metadata[k] for k in extra_keys if k in raw.metadata}
+            if extra:
+                extra_meta = extra
+
             items.append(Item(
                 id=item_id,
                 source=raw.source,
@@ -40,6 +47,7 @@ class Normalizer:
                 topics=topics,
                 stage="new",
                 raw_text=raw.raw_text,
+                extra_meta=extra_meta,
                 created_at=now,
             ))
 

@@ -275,8 +275,9 @@ def weekend_push(ctx):
 
 @cli.command("init-stars")
 @click.option("--max-pages", default=10, help="最多获取的页数 (每页100个)")
+@click.option("--refresh", is_flag=True, default=False, help="仅刷新已有条目的元数据(star数/语言)")
 @click.pass_context
-def init_stars(ctx, max_pages: int):
+def init_stars(ctx, max_pages: int, refresh: bool):
     """一次性导入 GitHub Stars 并分类"""
     import asyncio
 
@@ -289,19 +290,119 @@ def init_stars(ctx, max_pages: int):
         click.echo("Error: GITHUB_TOKEN not set", err=True)
         raise SystemExit(1)
 
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
-        raise SystemExit(1)
-
     try:
         from passive_agent.collectors.github_stars import GitHubStarsInitializer
         from passive_agent.integrations.deepseek import DeepSeekClient
 
-        llm = DeepSeekClient(api_key=api_key)
-        initializer = GitHubStarsInitializer(token, db, llm)
-        count = asyncio.run(initializer.run(max_pages=max_pages))
-        click.echo(f"Done. Imported {count} relevant repos from GitHub Stars.")
+        if refresh:
+            initializer = GitHubStarsInitializer(token, db, None)
+            count = asyncio.run(initializer.refresh_metadata(max_pages=max_pages))
+            click.echo(f"Done. Refreshed metadata for {count} items.")
+        else:
+            api_key = os.environ.get("DEEPSEEK_API_KEY")
+            if not api_key:
+                click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
+                raise SystemExit(1)
+            llm = DeepSeekClient(api_key=api_key)
+            initializer = GitHubStarsInitializer(token, db, llm)
+            count = asyncio.run(initializer.run(max_pages=max_pages))
+            click.echo(f"Done. Imported {count} relevant repos from GitHub Stars.")
+    finally:
+        db.close()
+
+
+@cli.command("list-stars")
+@click.option("--topic", default=None, help="按 topic 过滤 (如 Agent, RAG, LLM)")
+@click.option("--language", "lang", default=None, help="按语言过滤 (如 Python, TypeScript)")
+@click.option("--sort", "sort_by", default="stars", type=click.Choice(["stars", "name", "date"]),
+              help="排序方式")
+@click.option("--limit", default=50, help="显示条数")
+@click.pass_context
+def list_stars(ctx, topic: str | None, lang: str | None, sort_by: str, limit: int):
+    """查看已导入的 GitHub Stars（支持筛选/排序）"""
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        items = db.get_items_by_source("github_star", topic=topic)
+
+        if lang:
+            lang_lower = lang.lower()
+            items = [i for i in items if (i.extra_meta or {}).get("language", "").lower() == lang_lower]
+
+        if sort_by == "stars":
+            items.sort(key=lambda i: (i.extra_meta or {}).get("stars", 0), reverse=True)
+        elif sort_by == "name":
+            items.sort(key=lambda i: i.title.lower())
+        else:
+            items.sort(key=lambda i: i.collected_at, reverse=True)
+
+        items = items[:limit]
+
+        if not items:
+            click.echo("No GitHub Stars found matching the criteria.")
+            return
+
+        click.echo(f"{'Stars':<8}{'Language':<13}{'Topics':<20}{'Repo':<40}URL")
+        click.echo("-" * 110)
+        for item in items:
+            meta = item.extra_meta or {}
+            stars = meta.get("stars", 0)
+            stars_str = f"{stars/1000:.1f}k" if stars >= 1000 else str(stars)
+            language = meta.get("language", "-")[:12]
+            topics_str = ",".join(item.topics[:3])[:19]
+            title = item.title[:39]
+            click.echo(f"{stars_str:<8}{language:<13}{topics_str:<20}{title:<40}{item.url or ''}")
+
+        click.echo(f"\nTotal: {len(items)} repos")
+    finally:
+        db.close()
+
+
+@cli.command("export-stars")
+@click.option("--output", default=None, help="输出文件路径 (默认 data/reports/github_stars.md)")
+@click.option("--topic", default=None, help="只导出某个 topic")
+@click.pass_context
+def export_stars(ctx, output: str | None, topic: str | None):
+    """导出 GitHub Stars 为 Markdown 分类文件"""
+    from collections import defaultdict
+
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        items = db.get_items_by_source("github_star", topic=topic)
+        if not items:
+            click.echo("No GitHub Stars found.")
+            return
+
+        grouped: dict[str, list] = defaultdict(list)
+        for item in items:
+            for t in item.topics:
+                grouped[t].append(item)
+
+        lines = ["# GitHub Stars 分类整理\n"]
+        for group_topic in sorted(grouped.keys()):
+            group_items = grouped[group_topic]
+            group_items.sort(key=lambda i: (i.extra_meta or {}).get("stars", 0), reverse=True)
+            lines.append(f"\n## {group_topic}\n")
+            lines.append("| Stars | Repo | Language | Description |")
+            lines.append("|-------|------|----------|-------------|")
+            for item in group_items:
+                meta = item.extra_meta or {}
+                stars = meta.get("stars", 0)
+                stars_str = f"{stars/1000:.1f}k" if stars >= 1000 else str(stars)
+                language = meta.get("language", "-")
+                desc = (item.raw_text or "")[:80].replace("|", "/")
+                lines.append(f"| {stars_str} | [{item.title}]({item.url}) | {language} | {desc} |")
+
+        out_path = output or os.path.join(config.project_root or ".", "data", "reports", "github_stars.md")
+        from pathlib import Path
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        click.echo(f"Exported {len(items)} repos to {out_path}")
     finally:
         db.close()
 

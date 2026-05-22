@@ -25,12 +25,15 @@ class ObsidianCollector:
         for line in content.splitlines():
             stripped = line.strip()
 
-            if not stripped or stripped.startswith("##") or stripped.endswith("✓"):
+            if not stripped or stripped.startswith("#"):
                 continue
             if not stripped.startswith("- "):
                 continue
 
-            text = stripped[2:]
+            text = stripped[2:].strip()
+
+            if text.startswith("✓") or text.startswith("[x]") or text.endswith("✓"):
+                continue
             raw_line = line  # 保留原始行（含缩进）用于后续标记
 
             link_match = re.search(r'\[([^\]]+)\]\(([^)]+)\)', text)

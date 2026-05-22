@@ -53,7 +53,6 @@ class ObsidianSourceConfig:
 @dataclass
 class GitHubStarsConfig:
     enabled: bool = False
-    mode: str = "passive_index"
 
 
 @dataclass
@@ -85,9 +84,15 @@ class AppConfig:
 def load_config(config_dir: str = "config") -> AppConfig:
     config_path = Path(config_dir)
 
-    goals_data = _load_yaml(config_path / "goals.yaml")
-    sources_data = _load_yaml(config_path / "sources.yaml")
-    scoring_data = _load_yaml(config_path / "scoring.yaml")
+    unified = _load_yaml(config_path / "config.yaml")
+    if not unified:
+        unified = _load_yaml(config_path.parent / "config.yaml")
+    if not unified:
+        unified = {}
+
+    goals_data = unified.get("goals", {})
+    sources_data = unified.get("sources", {})
+    scoring_data = unified.get("scoring", {})
 
     goals = GoalsConfig(
         current_focus=goals_data.get("current_focus", ""),
@@ -116,7 +121,6 @@ def load_config(config_dir: str = "config") -> AppConfig:
         ),
         github_stars=GitHubStarsConfig(
             enabled=github_raw.get("enabled", False),
-            mode=github_raw.get("mode", "passive_index"),
         ),
     )
 

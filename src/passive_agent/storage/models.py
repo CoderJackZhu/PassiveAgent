@@ -40,6 +40,7 @@ class Item:
     ignored_count: int = 0
     is_weekend: bool = False
     raw_text: str | None = None
+    extra_meta: dict | None = None
     created_at: datetime = field(default_factory=datetime.now)
     actioned_at: datetime | None = None
 
@@ -65,6 +66,7 @@ class Item:
             "ignored_count": self.ignored_count,
             "is_weekend": int(self.is_weekend),
             "raw_text": self.raw_text,
+            "extra_meta": json.dumps(self.extra_meta, ensure_ascii=False) if self.extra_meta else None,
             "created_at": self.created_at.isoformat(),
             "actioned_at": self.actioned_at.isoformat() if self.actioned_at else None,
         }
@@ -76,6 +78,10 @@ class Item:
         topics = row.get("topics")
         if isinstance(topics, str):
             topics = json.loads(topics)
+
+        extra_meta = row.get("extra_meta")
+        if isinstance(extra_meta, str):
+            extra_meta = json.loads(extra_meta)
 
         return cls(
             id=row["id"],
@@ -96,6 +102,7 @@ class Item:
             ignored_count=row.get("ignored_count", 0),
             is_weekend=bool(row.get("is_weekend", 0)),
             raw_text=row.get("raw_text"),
+            extra_meta=extra_meta,
             created_at=datetime.fromisoformat(row["created_at"]),
             actioned_at=datetime.fromisoformat(row["actioned_at"]) if row.get("actioned_at") else None,
         )

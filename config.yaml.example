@@ -1,0 +1,65 @@
+# ============================================================
+# Passive Agent Workbench — 配置文件
+# 复制为 config.yaml 并按需修改
+# ============================================================
+
+# ---- 目标与优先级 ----
+goals:
+  current_focus: "Agent 算法岗面试准备"
+  priority_topics:
+    - Agent 架构与工程
+    - Tool Calling 与 Function Calling
+    - RAG 与评测
+    - Workflow / Orchestration
+    - Coding Agent
+    - LLM Infra（推理优化、部署）
+    - 模型评测方法论
+  low_priority_topics:
+    - 前端开发
+    - 移动开发
+    - 泛泛的 AI 趋势文章
+  output_preference: "interview_card"  # interview_card | tech_note
+
+# ---- 数据源 ----
+sources:
+  zotero:
+    enabled: true
+    db_path: "~/Zotero/zotero.sqlite"
+    lookback_days: 7
+    high_priority_collections:
+      - Agent
+      - RAG
+      - LLM
+    # 是否启用 Zotero tag 回写（会修改 Zotero 条目，请先用 CLI dry-run 测试）
+    writeback_enabled: false
+
+  obsidian:
+    enabled: false
+    inbox_path: "~/ObsidianVault/00-Inbox/inbox.md"
+    vault_path: "~/ObsidianVault"
+    # 只读输入目录（关联笔记搜索），支持多个
+    read_paths:
+      - "~/Documents/MyNotes"
+
+  github_stars:
+    enabled: false
+
+# ---- 评分与推送 ----
+scoring:
+  weights:
+    goal_relevance: 0.30
+    novelty: 0.20
+    actionability: 0.20
+    difficulty_fit: 0.10
+    source_quality: 0.10
+    timeliness: 0.10
+  daily_limit: 5            # 每日最多推送条数
+  weekend_limit: 5          # 周末队列最大容量
+  negative_feedback:
+    topic_threshold: 3      # 同主题连续忽略 N 次后降权
+    topic_penalty: 0.15
+    source_threshold: 5     # 同来源连续忽略 N 次后降权
+    source_penalty: 0.20
+    min_weight: 0.30        # 权重下限
+    recovery_days: 30       # 多少天未触发后恢复
+    recovery_rate: 0.05

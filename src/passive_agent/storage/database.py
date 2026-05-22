@@ -8,7 +8,7 @@ from pathlib import Path
 from passive_agent.storage.models import FeedbackRecord, Item, Score
 from passive_agent.utils.logger import log
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS items (
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS items (
     ignored_count INTEGER DEFAULT 0,
     is_weekend INTEGER DEFAULT 0,
     raw_text TEXT,
+    extra_meta TEXT,
     created_at TEXT NOT NULL,
     actioned_at TEXT
 );
@@ -125,6 +126,11 @@ class Database:
                     self.conn.execute("ALTER TABLE zotero_write_queue ADD COLUMN remove_tag TEXT")
                 except sqlite3.OperationalError:
                     pass  # column already exists (fresh DB)
+            if current_version < 3:
+                try:
+                    self.conn.execute("ALTER TABLE items ADD COLUMN extra_meta TEXT")
+                except sqlite3.OperationalError:
+                    pass
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             self.conn.commit()
             log.info(f"Database initialized (version {SCHEMA_VERSION})")
@@ -180,6 +186,23 @@ class Database:
     def get_all_urls(self) -> set[str]:
         rows = self.conn.execute("SELECT url FROM items WHERE url IS NOT NULL").fetchall()
         return {r["url"] for r in rows}
+
+    def get_items_by_source(self, source: str, topic: str | None = None) -> list[Item]:
+        if topic:
+            rows = self.conn.execute(
+                "SELECT * FROM items WHERE source = ? AND topics LIKE ?",
+                (source, f'%"{topic}"%'),
+            ).fetchall()
+        else:
+            rows = self.conn.execute("SELECT * FROM items WHERE source = ?", (source,)).fetchall()
+        return [Item.from_row(dict(r)) for r in rows]
+
+    def update_item_extra_meta(self, item_id: str, extra_meta: dict):
+        self.conn.execute(
+            "UPDATE items SET extra_meta = ? WHERE id = ?",
+            (json.dumps(extra_meta, ensure_ascii=False), item_id),
+        )
+        self.conn.commit()
 
     def get_archived_titles(self) -> list[str]:
         rows = self.conn.execute(

@@ -63,6 +63,28 @@ class GitHubStarsInitializer:
         log.info(f"Imported {len(normalized)} GitHub stars")
         return len(normalized)
 
+    async def refresh_metadata(self, max_pages: int = 10) -> int:
+        """Re-fetch star counts and language for existing github_star items."""
+        log.info("Refreshing GitHub Stars metadata...")
+        repos = await self._fetch_all_stars(max_pages)
+        url_to_repo = {r["url"]: r for r in repos}
+
+        existing_items = self.db.get_items_by_source("github_star")
+        updated = 0
+        for item in existing_items:
+            repo = url_to_repo.get(item.url)
+            if repo:
+                meta = {
+                    "language": repo["language"],
+                    "stars": repo["stars"],
+                    "github_topics": repo["topics"],
+                }
+                self.db.update_item_extra_meta(item.id, meta)
+                updated += 1
+
+        log.info(f"Refreshed metadata for {updated} items")
+        return updated
+
     async def _fetch_all_stars(self, max_pages: int) -> list[dict]:
         repos = []
         async with httpx.AsyncClient(headers=self.headers, timeout=30) as client:
@@ -87,6 +109,7 @@ class GitHubStarsInitializer:
                         "description": repo.get("description") or "",
                         "language": repo.get("language") or "",
                         "topics": repo.get("topics", []),
+                        "stars": repo.get("stargazers_count", 0),
                         "starred_at": entry.get("starred_at", ""),
                     })
 
@@ -132,7 +155,12 @@ class GitHubStarsInitializer:
                             title=repo["name"],
                             url=repo["url"],
                             raw_text=repo["description"],
-                            metadata={"topics": entry.get("topics", [])},
+                            metadata={
+                                "topics": entry.get("topics", []),
+                                "language": repo["language"],
+                                "stars": repo["stars"],
+                                "github_topics": repo["topics"],
+                            },
                         ))
             except Exception as e:
                 log.warning(f"Failed to classify batch {i//batch_size + 1}: {e}")
