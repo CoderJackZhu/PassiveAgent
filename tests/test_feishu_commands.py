@@ -1,7 +1,9 @@
 import asyncio
 
+import passive_agent.feishu.commands as commands_module
 from passive_agent.feishu.commands import CommandHandler
 from passive_agent.storage.models import Item
+from passive_agent.utils.config import load_config
 
 
 def test_pause_resume_commands_persist_state(db):
@@ -24,7 +26,40 @@ def test_push_command_returns_cli_guidance(db):
 
     text = asyncio.run(handler.handle("推送"))
 
-    assert "passive-agent daily" in text
+    assert text == "请使用 CLI 运行 passive-agent daily"
+
+
+def test_push_command_runs_pipeline_when_context_provided(config_dir, db, monkeypatch):
+    config = load_config(config_dir)
+    llm = object()
+    bot = object()
+    calls = []
+
+    class FakeResult:
+        status = "success"
+        collected = 4
+        processed = 3
+        recommended = [object(), object()]
+        pushed = 2
+
+    class FakePipeline:
+        def __init__(self, pipeline_config, pipeline_db, pipeline_llm, *, feishu_bot):
+            calls.append((pipeline_config, pipeline_db, pipeline_llm, feishu_bot))
+
+        async def run(self):
+            calls.append("run")
+            return FakeResult()
+
+    monkeypatch.setattr(commands_module, "DailyPipeline", FakePipeline)
+    handler = CommandHandler(db, config, llm, bot)
+
+    text = asyncio.run(handler.handle("推送"))
+
+    assert calls == [(config, db, llm, bot), "run"]
+    assert "collected 4" in text
+    assert "processed 3" in text
+    assert "recommended 2" in text
+    assert "pushed 2" in text
 
 
 def test_detail_command_returns_known_item(db):

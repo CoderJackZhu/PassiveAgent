@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from passive_agent.pipeline import DailyPipeline
 from passive_agent.processors.ranker import Ranker
 from passive_agent.storage.database import Database
-from passive_agent.utils.logger import log
+
+if TYPE_CHECKING:
+    from passive_agent.integrations.deepseek import DeepSeekClient
+    from passive_agent.utils.config import AppConfig
 
 
 class CommandHandler:
@@ -19,8 +25,17 @@ class CommandHandler:
         "详情": "_cmd_detail",
     }
 
-    def __init__(self, db: Database):
+    def __init__(
+        self,
+        db: Database,
+        config: AppConfig | None = None,
+        llm: DeepSeekClient | None = None,
+        feishu_bot: object | None = None,
+    ):
         self.db = db
+        self.config = config
+        self.llm = llm
+        self.feishu_bot = feishu_bot
 
     def is_paused(self) -> bool:
         return self.db.is_paused()
@@ -98,7 +113,16 @@ class CommandHandler:
         return "已恢复每日推送。"
 
     async def _cmd_push(self) -> str:
-        return "手动推送请在终端运行：passive-agent daily"
+        if not (self.config and self.llm and self.feishu_bot):
+            return "请使用 CLI 运行 passive-agent daily"
+
+        pipeline = DailyPipeline(self.config, self.db, self.llm, feishu_bot=self.feishu_bot)
+        result = await pipeline.run()
+        return (
+            f"手动推送完成（{result.status}）：\n"
+            f"collected {result.collected}, processed {result.processed}, "
+            f"recommended {len(result.recommended)}, pushed {result.pushed}"
+        )
 
     async def _cmd_detail(self, text: str) -> str:
         _, _, rest = text.partition("详情")

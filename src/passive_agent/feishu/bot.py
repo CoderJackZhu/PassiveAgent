@@ -59,7 +59,7 @@ class FeishuBot:
             .build()
 
         self.callback_handler = CallbackHandler(config, db, llm)
-        self.command_handler = CommandHandler(db)
+        self.command_handler = CommandHandler(db, config, llm, self)
 
     def start(self):
         """启动飞书长连接 WebSocket 服务"""
