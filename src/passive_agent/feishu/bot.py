@@ -110,12 +110,39 @@ class FeishuBot:
             log.error(f"Error handling message: {e}")
 
     def _on_card_action(self, data: P2CardActionTrigger) -> P2CardActionTriggerResponse | None:
-        """处理卡片按钮回调（通过 EventDispatcher 注册）"""
+        """处理卡片按钮回调（通过 EventDispatcher 注册）
+
+        飞书卡片回调有 ~3s 超时。慢操作（card/note/expand/link）
+        立即返回 toast 并在后台线程中处理，结果以新消息发送。
+        """
         try:
             action_value = data.event.action.value
             open_chat_id = data.event.context.open_chat_id if data.event.context else None
+            action = action_value.get("action") if isinstance(action_value, dict) else None
             log.info(f"Card action: {action_value}")
 
+            if not isinstance(action_value, dict):
+                return self._toast(f"无效的回调数据", toast_type="error")
+
+            # 慢操作：立即返回 toast，后台处理
+            if action in ("card", "note", "expand", "link"):
+                chat_id = open_chat_id or self.chat_id
+
+                def _process_slow():
+                    try:
+                        result = _run_async(self.callback_handler.handle(action_value))
+                        if result and result.get("type") == "new_message" and chat_id:
+                            self._send_card(chat_id, result["card"])
+                    except Exception as e:
+                        log.error(f"Background card action failed: {e}")
+                        if chat_id:
+                            self._reply_text(chat_id, f"处理失败：{e}")
+
+                import threading
+                threading.Thread(target=_process_slow, daemon=True).start()
+                return self._toast("正在处理，请稍候...")
+
+            # 快操作：同步处理
             result = _run_async(self.callback_handler.handle(action_value))
 
             if result is None:
@@ -127,7 +154,9 @@ class FeishuBot:
                 chat_id = open_chat_id or self.chat_id
                 if chat_id:
                     self._send_card(chat_id, result["card"])
-                return None
+                return self._toast("已发送")
+
+            return None
 
         except Exception as e:
             log.error(f"Error handling card action: {e}")
