@@ -1,4 +1,9 @@
+from datetime import date
+import html
 import os
+from pathlib import Path
+import re
+import webbrowser
 
 import click
 
@@ -41,6 +46,284 @@ def _notify_daily_error(feishu_bot, result):
         feishu_bot.send_error_notification(error_text)
     except Exception as e:
         log.warning(f"Feishu error notification failed: {e}")
+
+
+STAGE_ROWS = (
+    ("New", "new", "cyan"),
+    ("Summarized", "summarized", "blue"),
+    ("Recommended", "recommended", "green"),
+    ("Stale", "stale", "yellow"),
+    ("Archived", "archived", "magenta"),
+    ("Ignored", "ignored", "red"),
+)
+
+
+def _latest_collection_date(db: Database) -> str:
+    row = db.conn.execute("SELECT date FROM daily_log ORDER BY date DESC LIMIT 1").fetchone()
+    return row["date"] if row else date.today().isoformat()
+
+
+def _count_source_items_on(db: Database, source: str, date_str: str) -> int:
+    row = db.conn.execute(
+        "SELECT COUNT(*) AS cnt FROM items WHERE source = ? AND substr(collected_at, 1, 10) = ?",
+        (source, date_str),
+    ).fetchone()
+    return int(row["cnt"]) if row else 0
+
+
+def _collector_health_rows(config, db: Database) -> list[dict]:
+    collection_date = _latest_collection_date(db)
+    zotero_path = Path(config.sources.zotero.db_path).expanduser()
+    obsidian_path = Path(config.sources.obsidian.inbox_path).expanduser()
+
+    return [
+        {
+            "name": "Zotero",
+            "enabled": config.sources.zotero.enabled,
+            "available": zotero_path.exists(),
+            "date": collection_date,
+            "count": _count_source_items_on(db, "zotero", collection_date),
+        },
+        {
+            "name": "Obsidian",
+            "enabled": config.sources.obsidian.enabled,
+            "available": obsidian_path.exists() and obsidian_path.is_file(),
+            "date": collection_date,
+            "count": _count_source_items_on(db, "obsidian_inbox", collection_date),
+        },
+        {
+            "name": "GitHub Stars",
+            "enabled": config.sources.github_stars.enabled,
+            "available": bool(os.environ.get("GITHUB_TOKEN")),
+            "date": collection_date,
+            "count": _count_source_items_on(db, "github_star", collection_date),
+        },
+    ]
+
+
+def _format_feedback_summary(db: Database) -> str:
+    total_row = db.conn.execute("SELECT COUNT(*) AS cnt FROM feedback").fetchone()
+    total = int(total_row["cnt"]) if total_row else 0
+    if total == 0:
+        return "No feedback recorded"
+
+    action_rows = db.conn.execute(
+        "SELECT action, COUNT(*) AS cnt FROM feedback GROUP BY action ORDER BY cnt DESC, action"
+    ).fetchall()
+    actions = ", ".join(f"{r['action']}={r['cnt']}" for r in action_rows)
+
+    topic_rows = db.conn.execute(
+        "SELECT topic, weight FROM topic_weights WHERE weight < 1.0 ORDER BY weight ASC, topic LIMIT 5"
+    ).fetchall()
+    lowered_topics = ", ".join(f"{r['topic']}={r['weight']:.2f}" for r in topic_rows)
+
+    source_rows = db.conn.execute(
+        "SELECT source, weight FROM source_weights WHERE weight < 1.0 ORDER BY weight ASC, source LIMIT 5"
+    ).fetchall()
+    lowered_sources = ", ".join(f"{r['source']}={r['weight']:.2f}" for r in source_rows)
+
+    parts = [f"{total} feedback records"]
+    if actions:
+        parts.append(f"actions: {actions}")
+    if lowered_topics:
+        parts.append(f"lowered topics: {lowered_topics}")
+    if lowered_sources:
+        parts.append(f"lowered sources: {lowered_sources}")
+    return "; ".join(parts)
+
+
+def _render_inline_markdown(text: str) -> str:
+    parts = []
+    pos = 0
+    for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text):
+        parts.append(_render_inline_without_links(text[pos:match.start()]))
+        label = _render_inline_without_links(match.group(1))
+        href = html.escape(match.group(2), quote=True)
+        parts.append(f'<a href="{href}">{label}</a>')
+        pos = match.end()
+    parts.append(_render_inline_without_links(text[pos:]))
+    return "".join(parts)
+
+
+def _render_inline_without_links(text: str) -> str:
+    escaped = html.escape(text, quote=False)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+
+
+def _markdown_to_html(markdown_text: str, title: str) -> str:
+    body_lines: list[str] = []
+    in_list = False
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            body_lines.append("</ul>")
+            in_list = False
+
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            close_list()
+            continue
+
+        if stripped == "---":
+            close_list()
+            body_lines.append("<hr>")
+            continue
+
+        heading = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        if heading:
+            close_list()
+            level = len(heading.group(1))
+            body_lines.append(f"<h{level}>{_render_inline_markdown(heading.group(2))}</h{level}>")
+            continue
+
+        if stripped.startswith("- "):
+            if not in_list:
+                body_lines.append("<ul>")
+                in_list = True
+            body_lines.append(f"<li>{_render_inline_markdown(stripped[2:])}</li>")
+            continue
+
+        close_list()
+        body_lines.append(f"<p>{_render_inline_markdown(stripped)}</p>")
+
+    close_list()
+    escaped_title = html.escape(title)
+    body = "\n".join(body_lines)
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escaped_title}</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --fg: #1f2933;
+      --muted: #5f6b76;
+      --panel: #ffffff;
+      --border: #d8ddd8;
+      --link: #2563eb;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{
+        --bg: #101214;
+        --fg: #e5e7eb;
+        --muted: #a3adb8;
+        --panel: #171a1f;
+        --border: #2f363d;
+        --link: #8ab4ff;
+      }}
+    }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    main {{
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }}
+    h1, h2, h3 {{
+      line-height: 1.25;
+      margin: 1.6em 0 0.5em;
+    }}
+    h1 {{ margin-top: 0; font-size: 2rem; }}
+    p, ul {{ margin: 0.75rem 0; }}
+    ul {{ padding-left: 1.4rem; }}
+    li {{ margin: 0.3rem 0; }}
+    a {{ color: var(--link); }}
+    strong {{ color: var(--fg); }}
+    hr {{ border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }}
+    main {{
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      min-height: 100vh;
+    }}
+    @media (max-width: 720px) {{
+      main {{
+        padding: 32px 18px 56px;
+        border: 0;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+{body}
+  </main>
+</body>
+</html>
+"""
+
+
+def _report_title(markdown_text: str, fallback: str) -> str:
+    for line in markdown_text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return fallback
+
+
+def _write_report_html(markdown_path: Path) -> Path:
+    markdown_text = markdown_path.read_text(encoding="utf-8")
+    title = _report_title(markdown_text, markdown_path.stem)
+    html_path = markdown_path.with_suffix(".html")
+    html_path.write_text(_markdown_to_html(markdown_text, title), encoding="utf-8")
+    return html_path
+
+
+def _open_latest_report(config, prefix: str, label: str) -> Path:
+    reports_dir = Path(config.reports_dir)
+    candidates = sorted(
+        reports_dir.glob(f"{prefix}_*.md"),
+        key=lambda p: (p.stat().st_mtime, p.name),
+        reverse=True,
+    )
+    if not candidates:
+        raise click.ClickException(f"No {label} report found in {reports_dir}")
+
+    html_path = _write_report_html(candidates[0])
+    webbrowser.open(html_path.resolve().as_uri())
+    return html_path
+
+
+def _echo_dashboard_plain(config, db: Database):
+    counts = db.count_items_by_stage()
+    click.echo("Stage counts")
+    for label, stage, _color in STAGE_ROWS:
+        click.echo(f"  {label}: {counts.get(stage, 0)}")
+
+    click.echo("\nToday's recommendations")
+    recommended = db.get_items_by_stage("recommended")
+    recommended.sort(key=lambda item: (item.priority_score or 0, item.created_at), reverse=True)
+    if recommended:
+        for item in recommended[:10]:
+            score = f"{item.priority_score:.1f}" if item.priority_score is not None else "-"
+            topics = ", ".join(item.topics) or "-"
+            minutes = item.estimated_minutes if item.estimated_minutes is not None else "-"
+            action = item.recommended_action or "-"
+            click.echo(f"  {score} | {item.title} | {item.source} | {topics} | {minutes} | {action}")
+    else:
+        click.echo("  No recommendations")
+
+    click.echo("\nSource health")
+    for row in _collector_health_rows(config, db):
+        enabled = "yes" if row["enabled"] else "no"
+        available = "yes" if row["available"] else "no"
+        click.echo(
+            f"  {row['name']}: enabled={enabled}, available={available}, "
+            f"last_date={row['date']}, last_count={row['count']}"
+        )
+
+    pause_text = "Paused" if db.is_paused() else "Active"
+    click.echo("\nPause status")
+    click.echo(f"  Pause status: {pause_text}")
+    click.echo(f"  Feedback summary: {_format_feedback_summary(db)}")
 
 
 @click.group()
@@ -120,6 +403,95 @@ def weekly_report(ctx):
         click.echo(f"Weekly report: {path}")
     finally:
         db.close()
+
+
+@cli.command()
+@click.pass_context
+def dashboard(ctx):
+    """显示 Rich 终端看板"""
+    config = load_config(ctx.obj["config_dir"])
+    db = Database(config.db_path)
+    db.initialize()
+
+    try:
+        try:
+            from rich.console import Console
+            from rich.panel import Panel
+            from rich.table import Table
+        except ImportError:
+            _echo_dashboard_plain(config, db)
+            return
+
+        console = Console()
+        counts = db.count_items_by_stage()
+        stage_table = Table(title="Stage counts", show_header=True, header_style="bold")
+        stage_table.add_column("Stage")
+        stage_table.add_column("Count", justify="right")
+        for label, stage, color in STAGE_ROWS:
+            count = counts.get(stage, 0)
+            stage_table.add_row(f"[{color}]{label}[/{color}]", f"[bold {color}]{count}[/bold {color}]")
+        console.print(stage_table)
+
+        rec_table = Table(title="Today's recommendations", show_header=True, header_style="bold")
+        rec_table.add_column("Score", justify="right")
+        rec_table.add_column("Title")
+        rec_table.add_column("Source")
+        rec_table.add_column("Topics")
+        rec_table.add_column("Minutes", justify="right")
+        rec_table.add_column("Action")
+        recommended = db.get_items_by_stage("recommended")
+        recommended.sort(key=lambda item: (item.priority_score or 0, item.created_at), reverse=True)
+        if recommended:
+            for item in recommended[:10]:
+                score = f"{item.priority_score:.1f}" if item.priority_score is not None else "-"
+                rec_table.add_row(
+                    score,
+                    item.title,
+                    item.source,
+                    ", ".join(item.topics) or "-",
+                    str(item.estimated_minutes) if item.estimated_minutes is not None else "-",
+                    item.recommended_action or "-",
+                )
+        else:
+            rec_table.add_row("-", "No recommendations", "-", "-", "-", "-")
+        console.print(rec_table)
+
+        health_table = Table(title="Source health", show_header=True, header_style="bold")
+        health_table.add_column("Collector")
+        health_table.add_column("Enabled")
+        health_table.add_column("Available")
+        health_table.add_column("Last date")
+        health_table.add_column("Last count", justify="right")
+        for row in _collector_health_rows(config, db):
+            enabled = "[green]yes[/green]" if row["enabled"] else "[red]no[/red]"
+            available = "[green]yes[/green]" if row["available"] else "[red]no[/red]"
+            health_table.add_row(row["name"], enabled, available, row["date"], str(row["count"]))
+        console.print(health_table)
+
+        paused = db.is_paused()
+        pause_text = "Paused" if paused else "Active"
+        body = f"Pause status: {pause_text}\nFeedback summary: {_format_feedback_summary(db)}"
+        console.print(Panel(body, title="Pause status", expand=False))
+    finally:
+        db.close()
+
+
+@cli.command("open-daily")
+@click.pass_context
+def open_daily(ctx):
+    """将最新日报渲染为 HTML 并在浏览器中打开"""
+    config = load_config(ctx.obj["config_dir"])
+    html_path = _open_latest_report(config, "daily_review", "daily")
+    click.echo(f"Opened {html_path}")
+
+
+@cli.command("open-weekly")
+@click.pass_context
+def open_weekly(ctx):
+    """将最新周报渲染为 HTML 并在浏览器中打开"""
+    config = load_config(ctx.obj["config_dir"])
+    html_path = _open_latest_report(config, "weekly_review", "weekly")
+    click.echo(f"Opened {html_path}")
 
 
 @cli.command()

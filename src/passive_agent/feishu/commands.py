@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from passive_agent.processors.ranker import Ranker
 from passive_agent.storage.database import Database
 from passive_agent.utils.logger import log
 
@@ -14,6 +15,8 @@ class CommandHandler:
         "状态": "_cmd_status",
         "暂停": "_cmd_pause",
         "恢复": "_cmd_resume",
+        "推送": "_cmd_push",
+        "详情": "_cmd_detail",
     }
 
     def __init__(self, db: Database):
@@ -27,9 +30,11 @@ class CommandHandler:
         for keyword, method_name in self.COMMANDS.items():
             if keyword in text:
                 method = getattr(self, method_name)
+                if method_name == "_cmd_detail":
+                    return await method(text)
                 return await method()
 
-        return "支持的命令：本周总结 / 周末队列 / 最近卡片 / 状态 / 暂停 / 恢复"
+        return "支持的命令：本周总结 / 周末队列 / 最近卡片 / 状态 / 暂停 / 恢复 / 推送 / 详情 <item_id>"
 
     async def _cmd_weekly_summary(self) -> str:
         archived = self.db.get_items_by_stage("archived")
@@ -91,3 +96,38 @@ class CommandHandler:
     async def _cmd_resume(self) -> str:
         self.db.set_paused(False)
         return "已恢复每日推送。"
+
+    async def _cmd_push(self) -> str:
+        return "手动推送请在终端运行：passive-agent daily"
+
+    async def _cmd_detail(self, text: str) -> str:
+        _, _, rest = text.partition("详情")
+        parts = rest.strip().split()
+        item_id = parts[0] if parts else ""
+        if not item_id:
+            return "请提供条目 ID，例如：详情 item_20260523_001"
+
+        item = self.db.get_item(item_id)
+        if not item:
+            return f"未找到条目：{item_id}"
+
+        enriched = Ranker(self.db).enrich([item])[0]
+        score = f"{item.priority_score:.1f}" if item.priority_score is not None else "未评分"
+        topics = ", ".join(item.topics) if item.topics else "无"
+        related_stars = ", ".join(enriched.related_stars) if enriched.related_stars else "无"
+        related_zotero = ", ".join(enriched.related_zotero) if enriched.related_zotero else "无"
+
+        return (
+            f"条目详情：{item.id}\n"
+            f"- 标题：{item.title}\n"
+            f"- 来源：{item.source}\n"
+            f"- 评分：{score}\n"
+            f"- 摘要：{item.summary or '无'}\n"
+            f"- 面试价值：{item.interview_relevance or '无'}\n"
+            f"- Topics：{topics}\n"
+            f"- 建议动作：{item.recommended_action or '无'}\n"
+            f"- 预计时间：{item.estimated_minutes if item.estimated_minutes is not None else '未知'} 分钟\n"
+            f"- 链接：{item.url or item.local_path or '无'}\n"
+            f"- 相关 GitHub Stars：{related_stars}\n"
+            f"- 相关 Zotero：{related_zotero}"
+        )
