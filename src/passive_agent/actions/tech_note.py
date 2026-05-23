@@ -57,4 +57,5 @@ class TechNoteAction:
         return ActionResult.ok(
             f"技术笔记已生成: {output_path.name}",
             output_path=str(output_path),
+            content=note_content,
         )

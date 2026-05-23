@@ -90,10 +90,12 @@ class CallbackHandler:
         result = await handler.execute(item_id)
 
         if result.success:
-            card = CardBuilder.build_result_card(
-                "✓ 面试卡已生成",
-                f"**{self.db.get_item(item_id).title if self.db.get_item(item_id) else item_id}**\n\n"
-                f"路径：`{result.output_path}`",
+            item = self.db.get_item(item_id)
+            title_display = item.title if item else item_id
+            card = CardBuilder.build_content_card(
+                title=f"面试卡：{title_display[:40]}",
+                content=result.content or f"路径：`{result.output_path}`",
+                file_path=str(result.output_path),
             )
         else:
             card = CardBuilder.build_result_card("✗ 生成失败", result.message, success=False)
@@ -108,9 +110,12 @@ class CallbackHandler:
         result = await handler.execute(item_id)
 
         if result.success:
-            card = CardBuilder.build_result_card(
-                "✓ 技术笔记已生成",
-                f"路径：`{result.output_path}`",
+            item = self.db.get_item(item_id)
+            title_display = item.title if item else item_id
+            card = CardBuilder.build_content_card(
+                title=f"技术笔记：{title_display[:40]}",
+                content=result.content or f"路径：`{result.output_path}`",
+                file_path=str(result.output_path),
             )
         else:
             card = CardBuilder.build_result_card("✗ 生成失败", result.message, success=False)

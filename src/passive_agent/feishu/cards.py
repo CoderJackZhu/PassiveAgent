@@ -127,6 +127,37 @@ class CardBuilder:
         }
 
     @staticmethod
+    def build_content_card(title: str, content: str, file_path: str) -> dict:
+        """显示生成内容的卡片（面试卡/技术笔记）"""
+        # 去掉 YAML frontmatter
+        body = CardBuilder._strip_frontmatter(content)
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": "green",
+            },
+            "elements": [
+                {"tag": "markdown", "content": body},
+                {"tag": "hr"},
+                {"tag": "note", "elements": [
+                    {"tag": "plain_text", "content": f"已保存至 {file_path}"}
+                ]},
+            ],
+        }
+
+    @staticmethod
+    def _strip_frontmatter(md: str) -> str:
+        """去掉 Markdown 的 YAML frontmatter (--- ... ---)"""
+        lines = md.split("\n")
+        if lines and lines[0].strip() == "---":
+            end = 1
+            while end < len(lines) and lines[end].strip() != "---":
+                end += 1
+            return "\n".join(lines[end + 1:]).strip()
+        return md
+
+    @staticmethod
     def build_weekend_card(items: list[EnrichedItem]) -> dict:
         elements = []
 

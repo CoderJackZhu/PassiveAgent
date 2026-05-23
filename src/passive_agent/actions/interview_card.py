@@ -59,4 +59,5 @@ class InterviewCardAction:
         return ActionResult.ok(
             f"面试卡已生成: {output_path.name}",
             output_path=str(output_path),
+            content=card_content,
         )

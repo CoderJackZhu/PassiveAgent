@@ -9,10 +9,11 @@ class ActionResult:
     success: bool
     message: str
     output_path: str | None = None
+    content: str | None = None
 
     @classmethod
-    def ok(cls, message: str, output_path: str | None = None) -> ActionResult:
-        return cls(success=True, message=message, output_path=output_path)
+    def ok(cls, message: str, output_path: str | None = None, content: str | None = None) -> ActionResult:
+        return cls(success=True, message=message, output_path=output_path, content=content)
 
     @classmethod
     def error(cls, message: str) -> ActionResult:
