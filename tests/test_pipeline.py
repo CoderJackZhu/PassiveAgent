@@ -8,6 +8,8 @@ import pytest
 from click.testing import CliRunner
 
 import passive_agent.main as main_module
+from passive_agent.collectors.hf_daily import HFDailyPapersCollector
+from passive_agent.collectors.zotero import ZoteroCollector
 from passive_agent.feishu.cards import CardBuilder
 from passive_agent.pipeline import DailyPipeline, generate_weekly_report
 from passive_agent.processors.ranker import Ranker
@@ -56,6 +58,33 @@ class FakeBot:
     def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
         self.calls += 1
         return self.result
+
+
+def test_pipeline_initializes_collectors_with_configured_knobs(config_dir, db):
+    config = load_config(config_dir)
+    config.sources.zotero.enabled = True
+    config.sources.zotero.db_path = "/tmp/custom-zotero.sqlite"
+    config.sources.zotero.lookback_days = 14
+    config.sources.zotero.sqlite_timeout_seconds = 7.0
+    config.sources.zotero.db_retries = 4
+    config.sources.zotero.db_retry_sleep_seconds = 0.5
+    config.sources.hf_daily.enabled = True
+    config.sources.hf_daily.max_papers = 12
+    config.sources.hf_daily.lookback_days = 6
+    config.sources.hf_daily.http_timeout_seconds = 9.0
+
+    collectors = DailyPipeline(config, db)._init_collectors()
+
+    zotero = next(c for c in collectors if isinstance(c, ZoteroCollector))
+    hf_daily = next(c for c in collectors if isinstance(c, HFDailyPapersCollector))
+    assert str(zotero.db_path) == "/tmp/custom-zotero.sqlite"
+    assert zotero.lookback_days == 14
+    assert zotero.sqlite_timeout_seconds == 7.0
+    assert zotero.db_retries == 4
+    assert zotero.db_retry_sleep_seconds == 0.5
+    assert hf_daily.max_papers == 12
+    assert hf_daily.days == 6
+    assert hf_daily.timeout_seconds == 9.0
 
 
 @pytest.mark.asyncio
@@ -237,9 +266,16 @@ def test_ranker_enriches_items_with_related_github_stars_and_card_wording(db):
         topics=["Agent"],
         extra_meta={"stars": 1200},
     )
-    db.save_item(star)
+    second_star = Item(
+        id="star2",
+        source="github_star",
+        title="agent-runner",
+        topics=["Agent"],
+        extra_meta={"stars": 900},
+    )
+    db.save_items([star, second_star])
 
-    enriched = Ranker(db).enrich([item])
+    enriched = Ranker(db, related_stars_limit=1).enrich([item])
 
     assert enriched[0].related_stars == ["agent-framework"]
     card = CardBuilder.build_daily_card(enriched)

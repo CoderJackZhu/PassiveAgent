@@ -40,6 +40,35 @@ def _init_feishu_bot(config, db, llm=None, *, require_chat_id: bool = False):
         return None
 
 
+def _build_llm(config, *, required: bool = False):
+    if config.llm.provider != "deepseek":
+        message = f"LLM provider '{config.llm.provider}' is not supported"
+        if required:
+            raise click.ClickException(message)
+        log.warning(f"{message}, running without LLM")
+        return None
+
+    api_key = os.environ.get(config.llm.api_key_env)
+    if not api_key:
+        message = f"{config.llm.api_key_env} not set"
+        if required:
+            raise click.ClickException(message)
+        log.warning(f"{message}, running without LLM (collect only)")
+        return None
+
+    from passive_agent.integrations.deepseek import DeepSeekClient
+    return DeepSeekClient(
+        api_key=api_key,
+        api_key_env=config.llm.api_key_env,
+        base_url=config.llm.base_url,
+        model=config.llm.model,
+        temperature=config.llm.temperature,
+        max_concurrency=config.llm.max_concurrency,
+        max_retries=config.llm.max_retries,
+        retry_backoff_base_seconds=config.llm.retry_backoff_base_seconds,
+    )
+
+
 def _notify_daily_error(feishu_bot, result):
     if not feishu_bot or result.status == "paused":
         return
@@ -113,7 +142,8 @@ def _collector_health_rows(config, db: Database) -> list[dict]:
     ]
 
 
-def _format_feedback_summary(db: Database) -> str:
+def _format_feedback_summary(db: Database, limit: int = 5) -> str:
+    limit = max(0, limit)
     total_row = db.conn.execute("SELECT COUNT(*) AS cnt FROM feedback").fetchone()
     total = int(total_row["cnt"]) if total_row else 0
     if total == 0:
@@ -125,12 +155,14 @@ def _format_feedback_summary(db: Database) -> str:
     actions = ", ".join(f"{r['action']}={r['cnt']}" for r in action_rows)
 
     topic_rows = db.conn.execute(
-        "SELECT topic, weight FROM topic_weights WHERE weight < 1.0 ORDER BY weight ASC, topic LIMIT 5"
+        "SELECT topic, weight FROM topic_weights WHERE weight < 1.0 ORDER BY weight ASC, topic LIMIT ?",
+        (limit,),
     ).fetchall()
     lowered_topics = ", ".join(f"{r['topic']}={r['weight']:.2f}" for r in topic_rows)
 
     source_rows = db.conn.execute(
-        "SELECT source, weight FROM source_weights WHERE weight < 1.0 ORDER BY weight ASC, source LIMIT 5"
+        "SELECT source, weight FROM source_weights WHERE weight < 1.0 ORDER BY weight ASC, source LIMIT ?",
+        (limit,),
     ).fetchall()
     lowered_sources = ", ".join(f"{r['source']}={r['weight']:.2f}" for r in source_rows)
 
@@ -306,6 +338,7 @@ def _open_latest_report(config, prefix: str, label: str) -> Path:
 
 def _echo_dashboard_plain(config, db: Database):
     counts = db.count_items_by_stage()
+    dashboard_limit = max(0, config.display.dashboard_limit)
     click.echo("Stage counts")
     for label, stage, _color in STAGE_ROWS:
         click.echo(f"  {label}: {counts.get(stage, 0)}")
@@ -313,8 +346,8 @@ def _echo_dashboard_plain(config, db: Database):
     click.echo("\nToday's recommendations")
     recommended = db.get_items_by_stage("recommended")
     recommended.sort(key=lambda item: (item.priority_score or 0, item.created_at), reverse=True)
-    if recommended:
-        for item in recommended[:10]:
+    if recommended and dashboard_limit:
+        for item in recommended[:dashboard_limit]:
             score = f"{item.priority_score:.1f}" if item.priority_score is not None else "-"
             topics = ", ".join(item.topics) or "-"
             minutes = item.estimated_minutes if item.estimated_minutes is not None else "-"
@@ -335,7 +368,7 @@ def _echo_dashboard_plain(config, db: Database):
     pause_text = "Paused" if db.is_paused() else "Active"
     click.echo("\nPause status")
     click.echo(f"  Pause status: {pause_text}")
-    click.echo(f"  Feedback summary: {_format_feedback_summary(db)}")
+    click.echo(f"  Feedback summary: {_format_feedback_summary(db, config.display.feedback_summary_limit)}")
 
 
 @click.group()
@@ -357,13 +390,7 @@ def daily(ctx):
     db = Database(config.db_path)
     db.initialize()
 
-    llm = None
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if api_key:
-        from passive_agent.integrations.deepseek import DeepSeekClient
-        llm = DeepSeekClient(api_key=api_key)
-    else:
-        log.warning("DEEPSEEK_API_KEY not set, running without LLM (collect only)")
+    llm = _build_llm(config)
 
     # 飞书推送（可选）
     feishu_bot = _init_feishu_bot(config, db, llm, require_chat_id=True)
@@ -436,6 +463,7 @@ def dashboard(ctx):
 
         console = Console()
         counts = db.count_items_by_stage()
+        dashboard_limit = max(0, config.display.dashboard_limit)
         stage_table = Table(title="Stage counts", show_header=True, header_style="bold")
         stage_table.add_column("Stage")
         stage_table.add_column("Count", justify="right")
@@ -453,8 +481,8 @@ def dashboard(ctx):
         rec_table.add_column("Action")
         recommended = db.get_items_by_stage("recommended")
         recommended.sort(key=lambda item: (item.priority_score or 0, item.created_at), reverse=True)
-        if recommended:
-            for item in recommended[:10]:
+        if recommended and dashboard_limit:
+            for item in recommended[:dashboard_limit]:
                 score = f"{item.priority_score:.1f}" if item.priority_score is not None else "-"
                 rec_table.add_row(
                     score,
@@ -482,7 +510,10 @@ def dashboard(ctx):
 
         paused = db.is_paused()
         pause_text = "Paused" if paused else "Active"
-        body = f"Pause status: {pause_text}\nFeedback summary: {_format_feedback_summary(db)}"
+        body = (
+            f"Pause status: {pause_text}\n"
+            f"Feedback summary: {_format_feedback_summary(db, config.display.feedback_summary_limit)}"
+        )
         console.print(Panel(body, title="Pause status", expand=False))
     finally:
         db.close()
@@ -541,21 +572,15 @@ def serve(ctx):
     db = Database(config.db_path)
     db.initialize()
 
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
-        raise SystemExit(1)
-
-    from passive_agent.integrations.deepseek import DeepSeekClient
-    llm = DeepSeekClient(api_key=api_key)
-
-    missing = _missing_env(["FEISHU_APP_ID", "FEISHU_APP_SECRET"])
-    if missing:
-        click.echo(f"Error: missing env: {', '.join(missing)}", err=True)
-        click.echo("Set FEISHU_APP_ID and FEISHU_APP_SECRET environment variables.")
-        raise SystemExit(1)
-
     try:
+        llm = _build_llm(config, required=True)
+
+        missing = _missing_env(["FEISHU_APP_ID", "FEISHU_APP_SECRET"])
+        if missing:
+            click.echo(f"Error: missing env: {', '.join(missing)}", err=True)
+            click.echo("Set FEISHU_APP_ID and FEISHU_APP_SECRET environment variables.")
+            raise SystemExit(1)
+
         from passive_agent.feishu.bot import FeishuBot
         bot = FeishuBot(config, db, llm)
         bot.start()
@@ -610,13 +635,7 @@ def action(ctx, item_id: str, action_type: str):
         prompts_dir = os.path.join(config.project_root, config.prompts_dir) if config.project_root else config.prompts_dir
 
         if action_type in ("card", "note"):
-            api_key = os.environ.get("DEEPSEEK_API_KEY")
-            if not api_key:
-                click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
-                raise SystemExit(1)
-
-            from passive_agent.integrations.deepseek import DeepSeekClient
-            llm = DeepSeekClient(api_key=api_key)
+            llm = _build_llm(config, required=True)
 
             if action_type == "card":
                 from passive_agent.actions.interview_card import InterviewCardAction
@@ -695,15 +714,16 @@ def weekend_push(ctx):
 
 @cli.command("feishu-push")
 @click.option("--stage", default="recommended", help="推送指定 stage 的条目")
-@click.option("--limit", default=5, help="最多推送条数")
+@click.option("--limit", type=int, default=None, help="最多推送条数")
 @click.pass_context
-def feishu_push(ctx, stage: str, limit: int):
+def feishu_push(ctx, stage: str, limit: int | None):
     """手动推送当前条目到飞书，用于验证飞书配置"""
     config = load_config(ctx.obj["config_dir"])
     db = Database(config.db_path)
     db.initialize()
 
     try:
+        limit = max(0, config.display.manual_push_limit if limit is None else limit)
         items = db.get_items_by_stage(stage)[:limit]
         if not items:
             click.echo(f"No items with stage '{stage}'")
@@ -726,10 +746,10 @@ def feishu_push(ctx, stage: str, limit: int):
 
 
 @cli.command("init-stars")
-@click.option("--max-pages", default=10, help="最多获取的页数 (每页100个)")
+@click.option("--max-pages", type=int, default=None, help="最多获取的页数")
 @click.option("--refresh", is_flag=True, default=False, help="仅刷新已有条目的元数据(star数/语言)")
 @click.pass_context
-def init_stars(ctx, max_pages: int, refresh: bool):
+def init_stars(ctx, max_pages: int | None, refresh: bool):
     """一次性导入 GitHub Stars 并分类"""
     import asyncio
 
@@ -744,20 +764,33 @@ def init_stars(ctx, max_pages: int, refresh: bool):
 
     try:
         from passive_agent.collectors.github_stars import GitHubStarsInitializer
-        from passive_agent.integrations.deepseek import DeepSeekClient
+        stars_config = config.sources.github_stars
+        max_pages = max_pages if max_pages is not None else stars_config.max_pages
 
         if refresh:
-            initializer = GitHubStarsInitializer(token, db, None)
-            count = asyncio.run(initializer.refresh_metadata(max_pages=max_pages))
+            initializer = GitHubStarsInitializer(
+                token,
+                db,
+                None,
+                max_pages=max_pages,
+                per_page=stars_config.per_page,
+                classification_batch_size=stars_config.classification_batch_size,
+                http_timeout_seconds=stars_config.http_timeout_seconds,
+            )
+            count = asyncio.run(initializer.refresh_metadata())
             click.echo(f"Done. Refreshed metadata for {count} items.")
         else:
-            api_key = os.environ.get("DEEPSEEK_API_KEY")
-            if not api_key:
-                click.echo("Error: DEEPSEEK_API_KEY not set", err=True)
-                raise SystemExit(1)
-            llm = DeepSeekClient(api_key=api_key)
-            initializer = GitHubStarsInitializer(token, db, llm)
-            count = asyncio.run(initializer.run(max_pages=max_pages))
+            llm = _build_llm(config, required=True)
+            initializer = GitHubStarsInitializer(
+                token,
+                db,
+                llm,
+                max_pages=max_pages,
+                per_page=stars_config.per_page,
+                classification_batch_size=stars_config.classification_batch_size,
+                http_timeout_seconds=stars_config.http_timeout_seconds,
+            )
+            count = asyncio.run(initializer.run())
             click.echo(f"Done. Imported {count} relevant repos from GitHub Stars.")
     finally:
         db.close()
@@ -813,7 +846,7 @@ def list_stars(ctx, topic: str | None, lang: str | None, sort_by: str, limit: in
 
 
 @cli.command("export-stars")
-@click.option("--output", default=None, help="输出文件路径 (默认 data/reports/github_stars.md)")
+@click.option("--output", default=None, help="输出文件路径 (默认 reports_dir/github_stars.md)")
 @click.option("--topic", default=None, help="只导出某个 topic")
 @click.pass_context
 def export_stars(ctx, output: str | None, topic: str | None):
@@ -850,7 +883,7 @@ def export_stars(ctx, output: str | None, topic: str | None):
                 desc = (item.raw_text or "")[:80].replace("|", "/")
                 lines.append(f"| {stars_str} | [{item.title}]({item.url}) | {language} | {desc} |")
 
-        out_path = output or os.path.join(config.project_root or ".", "data", "reports", "github_stars.md")
+        out_path = output or os.path.join(config.reports_dir, "github_stars.md")
         from pathlib import Path
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
         Path(out_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -874,7 +907,10 @@ def zotero_writeback(ctx, execute: bool):
     try:
         from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
 
-        if not ZoteroWriteBack.is_available():
+        zotero_config = config.sources.zotero
+        if not ZoteroWriteBack.is_available(
+            local_api_timeout_seconds=zotero_config.local_api_timeout_seconds
+        ):
             click.echo("Error: Zotero local API not available (is Zotero running with HTTP API enabled?)", err=True)
             raise SystemExit(1)
 
@@ -884,7 +920,12 @@ def zotero_writeback(ctx, execute: bool):
         else:
             click.echo("⚠ EXECUTE mode: will modify Zotero item tags!")
 
-        wb = ZoteroWriteBack(db, dry_run=dry_run)
+        wb = ZoteroWriteBack(
+            db,
+            dry_run=dry_run,
+            writeback_timeout_seconds=zotero_config.writeback_timeout_seconds,
+            local_api_timeout_seconds=zotero_config.local_api_timeout_seconds,
+        )
         count = asyncio.run(wb.flush_queue())
 
         if execute:

@@ -79,8 +79,10 @@ class CommandHandler:
         return f"周末队列 ({len(rows)} 篇)：\n{items_text}"
 
     async def _cmd_recent_cards(self) -> str:
+        limit = max(0, self.config.display.recent_cards_limit if self.config else 5)
         rows = self.db.conn.execute(
-            "SELECT title FROM items WHERE stage = 'archived' ORDER BY actioned_at DESC LIMIT 5"
+            "SELECT title FROM items WHERE stage = 'archived' ORDER BY actioned_at DESC LIMIT ?",
+            (limit,),
         ).fetchall()
 
         if not rows:
@@ -135,7 +137,15 @@ class CommandHandler:
         if not item:
             return f"未找到条目：{item_id}"
 
-        enriched = Ranker(self.db).enrich([item])[0]
+        if self.config:
+            ranker = Ranker(
+                self.db,
+                related_zotero_limit=self.config.recommendations.related_zotero_limit,
+                related_stars_limit=self.config.recommendations.related_stars_limit,
+            )
+        else:
+            ranker = Ranker(self.db)
+        enriched = ranker.enrich([item])[0]
         score = f"{item.priority_score:.1f}" if item.priority_score is not None else "未评分"
         topics = ", ".join(item.topics) if item.topics else "无"
         related_stars = ", ".join(enriched.related_stars) if enriched.related_stars else "无"

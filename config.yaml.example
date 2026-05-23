@@ -3,6 +3,23 @@
 # 复制为 config.yaml 并按需修改
 # ============================================================
 
+# ---- 运行时路径 ----
+runtime:
+  db_path: "data/workbench.db"
+  reports_dir: "data/reports"
+  prompts_dir: "prompts"
+
+# ---- LLM ----
+llm:
+  provider: "deepseek"
+  api_key_env: "DEEPSEEK_API_KEY"  # 环境变量名，不在 YAML 中写密钥
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  temperature: 0.3
+  max_concurrency: 5
+  max_retries: 3
+  retry_backoff_base_seconds: 2.0
+
 # ---- 目标与优先级 ----
 goals:
   current_focus: "Agent 算法岗面试准备"
@@ -32,6 +49,11 @@ sources:
       - LLM
     # 是否启用 Zotero tag 回写（会修改 Zotero 条目，请先用 CLI dry-run 测试）
     writeback_enabled: false
+    sqlite_timeout_seconds: 30.0
+    db_retries: 3
+    db_retry_sleep_seconds: 5.0
+    writeback_timeout_seconds: 15.0
+    local_api_timeout_seconds: 3.0
 
   obsidian:
     enabled: false
@@ -43,10 +65,33 @@ sources:
 
   github_stars:
     enabled: false
+    max_pages: 10
+    per_page: 100
+    classification_batch_size: 10
+    http_timeout_seconds: 30.0
 
   hf_daily:
     enabled: true
     max_papers: 30
+    lookback_days: 30
+    http_timeout_seconds: 30.0
+
+# ---- 推荐与展示 ----
+recommendations:
+  stale_after_days: 7
+  related_zotero_limit: 3
+  related_stars_limit: 3
+
+display:
+  dashboard_limit: 10
+  feedback_summary_limit: 5
+  recent_cards_limit: 5
+  weekly_processed_limit: 10
+  manual_push_limit: 5
+
+# ---- 飞书 ----
+feishu:
+  async_timeout_seconds: 60.0
 
 # ---- 评分与推送 ----
 scoring:
@@ -62,8 +107,10 @@ scoring:
   negative_feedback:
     topic_threshold: 3      # 同主题连续忽略 N 次后降权
     topic_penalty: 0.15
+    topic_window: 10
     source_threshold: 5     # 同来源连续忽略 N 次后降权
     source_penalty: 0.20
+    source_window: 15
     min_weight: 0.30        # 权重下限
     recovery_days: 30       # 多少天未触发后恢复
     recovery_rate: 0.05

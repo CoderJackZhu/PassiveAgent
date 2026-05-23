@@ -9,9 +9,19 @@ from passive_agent.utils.logger import log
 
 
 class ZoteroCollector:
-    def __init__(self, db_path: str, lookback_days: int = 7):
+    def __init__(
+        self,
+        db_path: str,
+        lookback_days: int = 7,
+        sqlite_timeout_seconds: float = 30.0,
+        db_retries: int = 3,
+        db_retry_sleep_seconds: float = 5.0,
+    ):
         self.db_path = Path(db_path).expanduser()
         self.lookback_days = lookback_days
+        self.sqlite_timeout_seconds = max(0.1, sqlite_timeout_seconds)
+        self.db_retries = max(1, db_retries)
+        self.db_retry_sleep_seconds = max(0.0, db_retry_sleep_seconds)
 
     def is_available(self) -> bool:
         return self.db_path.exists()
@@ -22,16 +32,14 @@ class ZoteroCollector:
             return []
 
         cutoff = datetime.now() - timedelta(days=self.lookback_days)
-        retries = 3
-
-        for attempt in range(retries):
+        for attempt in range(self.db_retries):
             try:
                 return self._read_items(cutoff)
             except sqlite3.OperationalError as e:
-                if "locked" in str(e).lower() and attempt < retries - 1:
-                    log.warning(f"Zotero DB locked, retrying ({attempt + 1}/{retries})...")
+                if "locked" in str(e).lower() and attempt < self.db_retries - 1:
+                    log.warning(f"Zotero DB locked, retrying ({attempt + 1}/{self.db_retries})...")
                     import asyncio
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(self.db_retry_sleep_seconds)
                 else:
                     log.error(f"Failed to read Zotero DB: {e}")
                     return []
@@ -42,7 +50,7 @@ class ZoteroCollector:
         conn = sqlite3.connect(
             f"file:{self.db_path}?immutable=1",
             uri=True,
-            timeout=30,
+            timeout=self.sqlite_timeout_seconds,
         )
         conn.row_factory = sqlite3.Row
 

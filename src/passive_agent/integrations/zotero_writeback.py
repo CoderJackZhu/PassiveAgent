@@ -18,9 +18,17 @@ class ZoteroWriteBack:
     默认 dry_run=True 仅打印不执行，确认测试通过后设置 dry_run=False 正式启用。
     """
 
-    def __init__(self, db: Database, dry_run: bool = True):
+    def __init__(
+        self,
+        db: Database,
+        dry_run: bool = True,
+        writeback_timeout_seconds: float = 15.0,
+        local_api_timeout_seconds: float = 3.0,
+    ):
         self.db = db
         self.dry_run = dry_run
+        self.writeback_timeout_seconds = max(0.1, writeback_timeout_seconds)
+        self.local_api_timeout_seconds = max(0.1, local_api_timeout_seconds)
         self.api_key = os.environ.get("ZOTERO_API_KEY", "")
         self.user_id = ""
 
@@ -29,7 +37,10 @@ class ZoteroWriteBack:
         if self.user_id:
             return self.user_id
         try:
-            resp = await client.get(f"{ZOTERO_LOCAL_API}/users/0/items?limit=1")
+            resp = await client.get(
+                f"{ZOTERO_LOCAL_API}/users/0/items?limit=1",
+                timeout=self.local_api_timeout_seconds,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 if data:
@@ -63,7 +74,7 @@ class ZoteroWriteBack:
             return 0
 
         success_count = 0
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=self.writeback_timeout_seconds) as client:
             user_id = await self._resolve_user_id(client)
             if not user_id:
                 log.warning("Zotero write-back: could not resolve user ID")
@@ -137,9 +148,12 @@ class ZoteroWriteBack:
             return False
 
     @staticmethod
-    def is_available() -> bool:
+    def is_available(local_api_timeout_seconds: float = 3.0) -> bool:
         try:
-            resp = httpx.get(f"{ZOTERO_LOCAL_API}/users/0/items?limit=1", timeout=3)
+            resp = httpx.get(
+                f"{ZOTERO_LOCAL_API}/users/0/items?limit=1",
+                timeout=max(0.1, local_api_timeout_seconds),
+            )
             return resp.status_code == 200
         except (httpx.ConnectError, httpx.TimeoutException):
             return False

@@ -25,16 +25,21 @@ from passive_agent.utils.config import AppConfig
 from passive_agent.utils.logger import log
 
 
-def _run_async(coro):
+def _run_async(coro, timeout_seconds: float = 60.0):
     """Run async coroutine safely - handles case where event loop may already be running."""
+    timeout_seconds = max(0.1, timeout_seconds)
+
+    async def _with_timeout():
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        return asyncio.run(_with_timeout())
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        future = pool.submit(asyncio.run, coro)
-        return future.result(timeout=60)
+        future = pool.submit(asyncio.run, _with_timeout())
+        return future.result(timeout=timeout_seconds + 1)
 
 
 class FeishuBot:
@@ -102,7 +107,10 @@ class FeishuBot:
                 return
 
             log.info(f"Received message from {chat_id}: {text}")
-            response = _run_async(self.command_handler.handle(text))
+            response = _run_async(
+                self.command_handler.handle(text),
+                timeout_seconds=self.config.feishu.async_timeout_seconds,
+            )
 
             if response:
                 self._reply_text(chat_id, response)
@@ -130,7 +138,10 @@ class FeishuBot:
 
                 def _process_slow():
                     try:
-                        result = _run_async(self.callback_handler.handle(action_value))
+                        result = _run_async(
+                            self.callback_handler.handle(action_value),
+                            timeout_seconds=self.config.feishu.async_timeout_seconds,
+                        )
                         if result and result.get("type") == "new_message" and chat_id:
                             self._send_card(chat_id, result["card"])
                     except Exception as e:
@@ -143,7 +154,10 @@ class FeishuBot:
                 return self._toast("正在处理，请稍候...")
 
             # 快操作：同步处理
-            result = _run_async(self.callback_handler.handle(action_value))
+            result = _run_async(
+                self.callback_handler.handle(action_value),
+                timeout_seconds=self.config.feishu.async_timeout_seconds,
+            )
 
             if result is None:
                 return None

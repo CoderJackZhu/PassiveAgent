@@ -19,7 +19,7 @@ class FeedbackEngine:
         self._update_source_weight(item.source)
 
     def _update_topic_weight(self, topic: str):
-        recent = self.db.get_recent_feedback_for_topic(topic, window=10)
+        recent = self.db.get_recent_feedback_for_topic(topic, window=self.config.topic_window)
         ignore_count = sum(1 for f in recent if f.action == "ignore")
 
         if ignore_count >= self.config.topic_threshold:
@@ -30,10 +30,10 @@ class FeedbackEngine:
             )
             self.db.set_topic_weight(topic, new_weight)
             log.info(f"Topic '{topic}' weight: {current:.2f} → {new_weight:.2f} "
-                     f"(ignored {ignore_count}/10)")
+                     f"(ignored {ignore_count}/{self.config.topic_window})")
 
     def _update_source_weight(self, source: str):
-        recent = self.db.get_recent_feedback_for_source(source, window=15)
+        recent = self.db.get_recent_feedback_for_source(source, window=self.config.source_window)
         ignore_count = sum(1 for f in recent if f.action == "ignore")
 
         if ignore_count >= self.config.source_threshold:
@@ -44,7 +44,7 @@ class FeedbackEngine:
             )
             self.db.set_source_weight(source, new_weight)
             log.info(f"Source '{source}' weight: {current:.2f} → {new_weight:.2f} "
-                     f"(ignored {ignore_count}/15)")
+                     f"(ignored {ignore_count}/{self.config.source_window})")
 
     def recover_weights(self):
         """每日调用：对超过 recovery_days 未更新的权重进行自然恢复"""

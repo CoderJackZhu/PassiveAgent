@@ -34,18 +34,31 @@ class GitHubStarsCollector(Collector):
 class GitHubStarsInitializer:
     """一次性导入 GitHub Stars 并通过 LLM 批量分类"""
 
-    def __init__(self, token: str, db: Database, llm: DeepSeekClient):
+    def __init__(
+        self,
+        token: str,
+        db: Database,
+        llm: DeepSeekClient | None,
+        max_pages: int = 10,
+        per_page: int = 100,
+        classification_batch_size: int = 10,
+        http_timeout_seconds: float = 30.0,
+    ):
         self.token = token
         self.db = db
         self.llm = llm
+        self.max_pages = max(1, max_pages)
+        self.per_page = max(1, min(per_page, 100))
+        self.classification_batch_size = max(1, classification_batch_size)
+        self.http_timeout_seconds = max(0.1, http_timeout_seconds)
         self.headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github.v3.star+json",
         }
 
-    async def run(self, max_pages: int = 10) -> int:
+    async def run(self, max_pages: int | None = None) -> int:
         log.info("Fetching GitHub starred repos...")
-        repos = await self._fetch_all_stars(max_pages)
+        repos = await self._fetch_all_stars(max_pages or self.max_pages)
         log.info(f"Fetched {len(repos)} starred repos")
 
         existing_urls = self.db.get_all_urls()
@@ -63,10 +76,10 @@ class GitHubStarsInitializer:
         log.info(f"Imported {len(normalized)} GitHub stars")
         return len(normalized)
 
-    async def refresh_metadata(self, max_pages: int = 10) -> int:
+    async def refresh_metadata(self, max_pages: int | None = None) -> int:
         """Re-fetch star counts and language for existing github_star items."""
         log.info("Refreshing GitHub Stars metadata...")
-        repos = await self._fetch_all_stars(max_pages)
+        repos = await self._fetch_all_stars(max_pages or self.max_pages)
         url_to_repo = {r["url"]: r for r in repos}
 
         existing_items = self.db.get_items_by_source("github_star")
@@ -87,11 +100,11 @@ class GitHubStarsInitializer:
 
     async def _fetch_all_stars(self, max_pages: int) -> list[dict]:
         repos = []
-        async with httpx.AsyncClient(headers=self.headers, timeout=30) as client:
+        async with httpx.AsyncClient(headers=self.headers, timeout=self.http_timeout_seconds) as client:
             for page in range(1, max_pages + 1):
                 resp = await client.get(
                     f"{GITHUB_API}/user/starred",
-                    params={"page": page, "per_page": 100},
+                    params={"page": page, "per_page": self.per_page},
                 )
                 if resp.status_code != 200:
                     log.error(f"GitHub API error: {resp.status_code}")
@@ -114,13 +127,16 @@ class GitHubStarsInitializer:
                     })
 
                 log.info(f"  Page {page}: {len(data)} repos")
-                if len(data) < 100:
+                if len(data) < self.per_page:
                     break
 
         return repos
 
     async def _classify_batch(self, repos: list[dict]) -> list[RawItem]:
-        batch_size = 10
+        if self.llm is None:
+            raise ValueError("LLM client is required to classify GitHub Stars")
+
+        batch_size = self.classification_batch_size
         items: list[RawItem] = []
 
         for i in range(0, len(repos), batch_size):

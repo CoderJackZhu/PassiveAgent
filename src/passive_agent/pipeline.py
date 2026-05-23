@@ -52,6 +52,9 @@ class DailyPipeline:
             collectors.append(ZoteroCollector(
                 db_path=sources.zotero.db_path,
                 lookback_days=sources.zotero.lookback_days,
+                sqlite_timeout_seconds=sources.zotero.sqlite_timeout_seconds,
+                db_retries=sources.zotero.db_retries,
+                db_retry_sleep_seconds=sources.zotero.db_retry_sleep_seconds,
             ))
 
         if sources.obsidian.enabled:
@@ -62,6 +65,8 @@ class DailyPipeline:
         if sources.hf_daily.enabled:
             collectors.append(HFDailyPapersCollector(
                 max_papers=sources.hf_daily.max_papers,
+                days=sources.hf_daily.lookback_days,
+                timeout_seconds=sources.hf_daily.http_timeout_seconds,
             ))
 
         return collectors
@@ -84,7 +89,9 @@ class DailyPipeline:
             # 0. 权重自然恢复 + 过期推荐清理
             feedback_engine = FeedbackEngine(self.db, self.config.scoring.negative_feedback)
             feedback_engine.recover_weights()
-            stale_count = self.db.mark_stale_recommendations(days=7)
+            stale_count = self.db.mark_stale_recommendations(
+                days=self.config.recommendations.stale_after_days
+            )
             if stale_count:
                 log.info(f"Marked {stale_count} stale recommendations")
 
@@ -161,7 +168,12 @@ class DailyPipeline:
             scored = await scorer.score_batch(summarized)
 
             # 6. Rank + Top N
-            ranker = Ranker(self.db, self.config.scoring.daily_limit)
+            ranker = Ranker(
+                self.db,
+                self.config.scoring.daily_limit,
+                related_zotero_limit=self.config.recommendations.related_zotero_limit,
+                related_stars_limit=self.config.recommendations.related_stars_limit,
+            )
             top_items = ranker.select_top(scored)
 
             # 7. Enrich
@@ -195,16 +207,30 @@ class DailyPipeline:
             if self.config.sources.zotero.writeback_enabled:
                 try:
                     from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
-                    if ZoteroWriteBack.is_available():
-                        wb = ZoteroWriteBack(self.db, dry_run=False)
+                    if ZoteroWriteBack.is_available(
+                        local_api_timeout_seconds=self.config.sources.zotero.local_api_timeout_seconds
+                    ):
+                        wb = ZoteroWriteBack(
+                            self.db,
+                            dry_run=False,
+                            writeback_timeout_seconds=self.config.sources.zotero.writeback_timeout_seconds,
+                            local_api_timeout_seconds=self.config.sources.zotero.local_api_timeout_seconds,
+                        )
                         await wb.flush_queue()
                 except Exception as e:
                     log.warning(f"Zotero write-back skipped: {e}")
             else:
                 try:
                     from passive_agent.integrations.zotero_writeback import ZoteroWriteBack
-                    if ZoteroWriteBack.is_available():
-                        wb = ZoteroWriteBack(self.db, dry_run=True)
+                    if ZoteroWriteBack.is_available(
+                        local_api_timeout_seconds=self.config.sources.zotero.local_api_timeout_seconds
+                    ):
+                        wb = ZoteroWriteBack(
+                            self.db,
+                            dry_run=True,
+                            writeback_timeout_seconds=self.config.sources.zotero.writeback_timeout_seconds,
+                            local_api_timeout_seconds=self.config.sources.zotero.local_api_timeout_seconds,
+                        )
                         await wb.flush_queue()
                 except Exception:
                     pass
@@ -365,7 +391,7 @@ def generate_weekly_report(config: AppConfig, db: Database) -> str:
 
     if week_archived:
         lines.append("## 本周处理\n")
-        for item in week_archived[:10]:
+        for item in week_archived[:config.display.weekly_processed_limit]:
             lines.append(f"- [{item.title[:50]}] → {item.stage}")
         lines.append("")
 

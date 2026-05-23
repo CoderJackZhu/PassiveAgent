@@ -18,10 +18,12 @@ class HFDailyPapersCollector(Collector):
         self,
         max_papers: int = 30,
         days: int = 30,
+        timeout_seconds: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ):
         self.max_papers = max(0, max_papers)
         self.days = max(1, days)
+        self.timeout_seconds = max(0.1, timeout_seconds)
         self.transport = transport
 
     def is_available(self) -> bool:
@@ -35,7 +37,7 @@ class HFDailyPapersCollector(Collector):
         items: list[RawItem] = []
         seen_paper_ids: set[str] = set()
 
-        async with httpx.AsyncClient(timeout=30, transport=self.transport) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self.transport) as client:
             for offset in range(self.days):
                 paper_date = today - timedelta(days=offset)
                 entries = await self._fetch_day(client, paper_date)

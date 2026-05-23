@@ -10,15 +10,30 @@ from passive_agent.utils.logger import log
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str | None = None, base_url: str = "https://api.deepseek.com",
-                 model: str = "deepseek-chat", max_concurrency: int = 5):
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
+    def __init__(
+        self,
+        api_key: str | None = None,
+        api_key_env: str = "DEEPSEEK_API_KEY",
+        base_url: str = "https://api.deepseek.com",
+        model: str = "deepseek-chat",
+        max_concurrency: int = 5,
+        temperature: float = 0.3,
+        max_retries: int = 3,
+        retry_backoff_base_seconds: float = 2.0,
+    ):
+        self.api_key_env = api_key_env
+        self.api_key = api_key or os.environ.get(api_key_env, "")
         if not self.api_key:
-            raise ValueError("DEEPSEEK_API_KEY not set")
+            raise ValueError(f"{api_key_env} not set")
 
+        self.base_url = base_url
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=base_url)
         self.model = model
-        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self.max_concurrency = max(1, max_concurrency)
+        self.temperature = temperature
+        self.max_retries = max(1, max_retries)
+        self.retry_backoff_base_seconds = max(0.0, retry_backoff_base_seconds)
+        self._semaphore = asyncio.Semaphore(self.max_concurrency)
 
     async def generate(self, system: str, user: str, expect_json: bool = False) -> str:
         async with self._semaphore:
@@ -28,12 +43,12 @@ class DeepSeekClient:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "temperature": 0.3,
+                "temperature": self.temperature,
             }
             if expect_json:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            for attempt in range(3):
+            for attempt in range(self.max_retries):
                 try:
                     response = await self.client.chat.completions.create(**kwargs)
                     return response.choices[0].message.content or ""
@@ -41,9 +56,9 @@ class DeepSeekClient:
                     # 认证错误不重试
                     if "401" in str(e) or "authentication" in str(e).lower():
                         raise
-                    if attempt < 2:
-                        wait = 2 ** (attempt + 1)
-                        log.warning(f"DeepSeek API error (retry in {wait}s): {e}")
+                    if attempt < self.max_retries - 1:
+                        wait = self.retry_backoff_base_seconds * (2 ** attempt)
+                        log.warning(f"DeepSeek API error (retry in {wait:g}s): {e}")
                         await asyncio.sleep(wait)
                     else:
                         raise

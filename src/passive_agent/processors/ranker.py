@@ -6,9 +6,17 @@ from passive_agent.utils.logger import log
 
 
 class Ranker:
-    def __init__(self, db: Database, daily_limit: int = 3):
+    def __init__(
+        self,
+        db: Database,
+        daily_limit: int = 3,
+        related_zotero_limit: int = 3,
+        related_stars_limit: int = 3,
+    ):
         self.db = db
         self.daily_limit = daily_limit
+        self.related_zotero_limit = max(0, related_zotero_limit)
+        self.related_stars_limit = max(0, related_stars_limit)
 
     def select_top(self, items: list[Item], limit: int | None = None) -> list[Item]:
         limit = limit or self.daily_limit
@@ -33,7 +41,7 @@ class Ranker:
 
     def _find_related_zotero(self, item: Item) -> list[str]:
         """查找 DB 中同 topic 的已有条目作为相关推荐"""
-        if not item.topics:
+        if not item.topics or self.related_zotero_limit == 0:
             return []
 
         all_items = self.db.get_items_by_stage("archived")
@@ -43,13 +51,13 @@ class Ranker:
                 continue
             if any(t in existing.topics for t in item.topics):
                 related.append(existing.title)
-                if len(related) >= 3:
+                if len(related) >= self.related_zotero_limit:
                     break
         return related
 
     def _find_related_stars(self, item: Item) -> list[str]:
         """Use existing imported GitHub Stars as lightweight enrichment."""
-        if not item.topics or item.source == "github_star":
+        if not item.topics or item.source == "github_star" or self.related_stars_limit == 0:
             return []
 
         stars = self.db.get_items_by_source("github_star")
@@ -66,6 +74,6 @@ class Ranker:
                 continue
             if any(t in star.topics for t in item.topics):
                 related.append(star.title)
-                if len(related) >= 3:
+                if len(related) >= self.related_stars_limit:
                     break
         return related
