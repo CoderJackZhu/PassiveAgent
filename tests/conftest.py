@@ -31,6 +31,9 @@ sources:
     vault_path: "/tmp/fake_vault"
   github_stars:
     enabled: false
+  hf_daily:
+    enabled: false
+    max_papers: 30
 
 scoring:
   weights:

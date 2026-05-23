@@ -25,7 +25,7 @@ sources:
   zotero:
     enabled: true
     db_path: "~/Zotero/zotero.sqlite"
-    lookback_days: 7
+    lookback_days: 365
     high_priority_collections:
       - Agent
       - RAG
@@ -43,6 +43,10 @@ sources:
 
   github_stars:
     enabled: false
+
+  hf_daily:
+    enabled: true
+    max_papers: 30
 
 # ---- 评分与推送 ----
 scoring:

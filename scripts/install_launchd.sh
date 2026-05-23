@@ -21,6 +21,43 @@ path_is_inside() {
     [[ "$child" == "$parent" || "$child" == "$parent"/* ]]
 }
 
+read_dotenv_value() {
+    local key="$1"
+    local env_file="$PROJECT_DIR/.env"
+    [[ -f "$env_file" ]] || return 1
+
+    (
+        unset FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID DEEPSEEK_API_KEY GITHUB_TOKEN
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file" >/dev/null 2>&1 || exit 1
+        set +a
+        local value="${!key:-}"
+        [[ -n "$value" ]] || exit 1
+        printf "%s" "$value"
+    )
+}
+
+append_env_to_plist() {
+    local plist="$1"
+    local key
+    local value
+    local has_env=0
+
+    for key in FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID DEEPSEEK_API_KEY GITHUB_TOKEN; do
+        if value="$(read_dotenv_value "$key")"; then
+            if [[ "$has_env" -eq 0 ]]; then
+                /usr/libexec/PlistBuddy -c "Print :EnvironmentVariables" "$plist" >/dev/null 2>&1 \
+                    || /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables dict" "$plist"
+                has_env=1
+            fi
+
+            /usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:$key" "$plist" >/dev/null 2>&1 || true
+            /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:$key string $value" "$plist"
+        fi
+    done
+}
+
 preflight_project_dir() {
     local project_dir
     local home_dir
@@ -86,6 +123,7 @@ main() {
 
         # Substitute placeholder and install
         sed "s|__PROJECT_DIR__|$PROJECT_DIR|g" "$plist" > "$dest"
+        append_env_to_plist "$dest"
         launchctl load "$dest"
         echo "Loaded: $name"
     done
@@ -96,8 +134,8 @@ main() {
     echo "  - com.passive-agent.serve    (飞书 Bot 常驻, KeepAlive)"
     echo "  - com.passive-agent.weekend  (每周六 10:00 推送周末队列)"
     echo ""
-    echo "Tip: set environment variables in ~/.zshenv or use 'launchctl setenv' for:"
-    echo "  DEEPSEEK_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_ID"
+    echo "Tip: non-empty values from .env are written into the plists for:"
+    echo "  DEEPSEEK_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_ID, GITHUB_TOKEN"
     echo ""
     echo "管理命令:"
     echo "  launchctl list | grep passive-agent"

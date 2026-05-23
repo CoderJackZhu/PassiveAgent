@@ -1,7 +1,12 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 from datetime import date
 import html
 import os
-from pathlib import Path
 import re
 import webbrowser
 
@@ -97,6 +102,13 @@ def _collector_health_rows(config, db: Database) -> list[dict]:
             "available": bool(os.environ.get("GITHUB_TOKEN")),
             "date": collection_date,
             "count": _count_source_items_on(db, "github_star", collection_date),
+        },
+        {
+            "name": "HF Daily Papers",
+            "enabled": config.sources.hf_daily.enabled,
+            "available": True,
+            "date": collection_date,
+            "count": _count_source_items_on(db, "hf_daily_papers", collection_date),
         },
     ]
 

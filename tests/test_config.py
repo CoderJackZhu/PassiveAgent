@@ -7,6 +7,8 @@ def test_load_config(config_dir):
     assert config.goals.current_focus == "test"
     assert "Agent" in config.goals.priority_topics
     assert config.sources.zotero.enabled is False
+    assert config.sources.hf_daily.enabled is False
+    assert config.sources.hf_daily.max_papers == 30
     assert config.scoring.weights.goal_relevance == 0.30
     assert config.scoring.daily_limit == 3
     assert config.scoring.negative_feedback.topic_threshold == 3

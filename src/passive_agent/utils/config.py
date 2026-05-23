@@ -38,7 +38,7 @@ class ScoringConfig:
 class ZoteroSourceConfig:
     enabled: bool = True
     db_path: str = "~/Zotero/zotero.sqlite"
-    lookback_days: int = 7
+    lookback_days: int = 365
     high_priority_collections: list[str] = field(default_factory=list)
     writeback_enabled: bool = False
 
@@ -57,10 +57,17 @@ class GitHubStarsConfig:
 
 
 @dataclass
+class HFDailyConfig:
+    enabled: bool = True
+    max_papers: int = 30
+
+
+@dataclass
 class SourcesConfig:
     zotero: ZoteroSourceConfig = field(default_factory=ZoteroSourceConfig)
     obsidian: ObsidianSourceConfig = field(default_factory=ObsidianSourceConfig)
     github_stars: GitHubStarsConfig = field(default_factory=GitHubStarsConfig)
+    hf_daily: HFDailyConfig = field(default_factory=HFDailyConfig)
 
 
 @dataclass
@@ -108,13 +115,14 @@ def load_config(config_dir: str = "config") -> AppConfig:
     zotero_raw = sources_data.get("zotero", {})
     obsidian_raw = sources_data.get("obsidian", {})
     github_raw = sources_data.get("github_stars", {})
+    hf_daily_raw = sources_data.get("hf_daily", {})
     default_obsidian = ObsidianSourceConfig()
 
     sources = SourcesConfig(
         zotero=ZoteroSourceConfig(
             enabled=zotero_raw.get("enabled", True),
             db_path=zotero_raw.get("db_path", "~/Zotero/zotero.sqlite"),
-            lookback_days=zotero_raw.get("lookback_days", 7),
+            lookback_days=zotero_raw.get("lookback_days", 365),
             high_priority_collections=zotero_raw.get("high_priority_collections", []),
             writeback_enabled=zotero_raw.get("writeback_enabled", False),
         ),
@@ -126,6 +134,10 @@ def load_config(config_dir: str = "config") -> AppConfig:
         ),
         github_stars=GitHubStarsConfig(
             enabled=github_raw.get("enabled", False),
+        ),
+        hf_daily=HFDailyConfig(
+            enabled=hf_daily_raw.get("enabled", True),
+            max_papers=hf_daily_raw.get("max_papers", 30),
         ),
     )
 

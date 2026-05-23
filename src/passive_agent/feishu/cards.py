@@ -17,7 +17,12 @@ class CardBuilder:
             item = enriched.item
 
             # 条目信息
-            source_text = {"zotero": "Zotero", "obsidian_inbox": "Obsidian", "github_star": "GitHub"}
+            source_text = {
+                "zotero": "Zotero",
+                "obsidian_inbox": "Obsidian",
+                "github_star": "GitHub",
+                "hf_daily_papers": "HF Daily Papers",
+            }
             source_label = source_text.get(item.source, item.source)
             topic_label = " · ".join(item.topics[:2]) if item.topics else ""
 

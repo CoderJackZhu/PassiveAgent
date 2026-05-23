@@ -24,7 +24,7 @@ cp config.yaml.example config.yaml
 zotero:
   enabled: true
   db_path: "~/Zotero/zotero.sqlite"   # Zotero 本地数据库路径
-  lookback_days: 7                      # 采集最近 N 天新增的条目
+  lookback_days: 365                    # 采集最近 N 天新增的条目
   high_priority_collections:            # 高优先级分类集合（自动加权 15%）
     - Agent
     - RAG
@@ -82,6 +82,16 @@ github_stars:
 GitHub Stars 不参与每日 pipeline 自动采集，仅通过 `init-stars` 命令手动导入。
 
 需要设置 `GITHUB_TOKEN` 环境变量（可通过 `gh auth token` 获取）。
+
+### HuggingFace Daily Papers
+
+```yaml
+hf_daily:
+  enabled: true
+  max_papers: 30
+```
+
+HuggingFace Daily Papers 每日 pipeline 自动采集最近 30 天的热门论文，不需要 API Key。`max_papers` 控制该来源每次运行最多采集的论文数。
 
 ## goals 部分
 
@@ -144,7 +154,7 @@ scoring:
 
 建议在 `~/.zshrc` 或 `.env` 中配置（`.env` 已被 gitignore）。
 
-如果通过 launchd 定时运行，当前终端中的 `export` 不会自动传给任务。请使用 `launchctl setenv` 设置用户级环境变量，或在 plist 的 `EnvironmentVariables` 中写入 `DEEPSEEK_API_KEY`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_CHAT_ID`。
+如果通过 launchd 定时运行，当前终端中的 `export` 不会自动传给任务。`scripts/install_launchd.sh` 会把 `.env` 中非空的 `DEEPSEEK_API_KEY`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID` 和 `GITHUB_TOKEN` 写入 plist 的 `EnvironmentVariables`。
 
 安装 launchd 服务前，建议把项目放在 `~/Code`、`~/Developer` 等普通目录。macOS 的 Documents、Desktop、Downloads 受隐私权限保护，LaunchAgent 后台进程可能无法读取项目内 `.venv`，导致 `PermissionError: [Errno 1] Operation not permitted: .../.venv/pyvenv.cfg`。`scripts/install_launchd.sh` 会阻止从这些目录静默安装并打印迁移/重装命令；如已明确授予所需权限，可用 `PASSIVE_AGENT_ALLOW_TCC_PROTECTED_DIR=1 scripts/install_launchd.sh` 覆盖。
 

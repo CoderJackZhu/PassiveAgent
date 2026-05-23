@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from passive_agent.collectors.hf_daily import HFDailyPapersCollector
 from passive_agent.collectors.obsidian import ObsidianCollector
 from passive_agent.collectors.zotero import ZoteroCollector
 from passive_agent.integrations.deepseek import DeepSeekClient
@@ -56,6 +57,11 @@ class DailyPipeline:
         if sources.obsidian.enabled:
             collectors.append(ObsidianCollector(
                 inbox_path=sources.obsidian.inbox_path,
+            ))
+
+        if sources.hf_daily.enabled:
+            collectors.append(HFDailyPapersCollector(
+                max_papers=sources.hf_daily.max_papers,
             ))
 
         return collectors

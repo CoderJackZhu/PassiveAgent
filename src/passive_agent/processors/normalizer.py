@@ -30,7 +30,10 @@ class Normalizer:
 
             # Extract extra metadata (language, stars, Zotero fields, etc.) for persistence
             extra_meta = None
-            extra_keys = ("language", "stars", "github_topics", "abstract", "collections", "date_added")
+            extra_keys = (
+                "language", "stars", "github_topics", "abstract", "collections", "date_added",
+                "paper_id", "upvotes",
+            )
             extra = {k: raw.metadata[k] for k in extra_keys if k in raw.metadata}
             if extra:
                 extra_meta = extra

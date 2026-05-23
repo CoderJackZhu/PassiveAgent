@@ -23,7 +23,7 @@ class Item:
     """标准化后的条目"""
 
     id: str
-    source: Literal["zotero", "obsidian_inbox", "github_star"]
+    source: Literal["zotero", "obsidian_inbox", "github_star", "hf_daily_papers"]
     title: str
     url: str | None = None
     local_path: str | None = None
