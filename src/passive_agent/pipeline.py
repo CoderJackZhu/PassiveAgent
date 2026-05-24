@@ -119,9 +119,12 @@ class DailyPipeline:
             collected_count = len(raw_items)
             if not raw_items:
                 log.info("No new items collected from any source.")
+                pushed = await self._push_existing_recommendations(feishu_bot=self.feishu_bot)
+                if pushed > 0:
+                    log.info(f"Pushed {pushed} existing recommendations (no new items collected).")
                 status = "error" if errors else "empty"
-                self.db.log_daily_run(date.today(), 0, 0, 0, errors, status=status)
-                return PipelineResult(status=status, errors=errors, stale=stale_count)
+                self.db.log_daily_run(date.today(), 0, 0, pushed, errors, status=status)
+                return PipelineResult(status=status, pushed=pushed, errors=errors, stale=stale_count)
 
             # 2. Normalize
             items = self.normalizer.normalize(raw_items)
@@ -132,10 +135,18 @@ class DailyPipeline:
             processed_count = len(new_items)
             if not new_items:
                 log.info("All items are duplicates.")
-                self.db.log_daily_run(date.today(), collected_count, 0, 0, errors, status="all_duplicates")
+                # 即使没有新条目，也推送已有的推荐
+                pushed = await self._push_existing_recommendations(feishu_bot=self.feishu_bot)
+                if pushed > 0:
+                    log.info(f"Pushed {pushed} existing recommendations (no new items today).")
+                self.db.log_daily_run(
+                    date.today(), collected_count, 0, pushed, errors,
+                    status="all_duplicates",
+                )
                 return PipelineResult(
                     status="all_duplicates",
                     collected=collected_count,
+                    pushed=pushed,
                     errors=errors,
                     stale=stale_count,
                 )
@@ -267,6 +278,28 @@ class DailyPipeline:
                 stale=stale_count,
                 errors=errors,
             )
+
+    async def _push_existing_recommendations(self, feishu_bot) -> int:
+        """当没有新条目时，推送已有推荐池中的条目"""
+        recommended = self.db.get_items_by_stage("recommended")
+        if not recommended or not feishu_bot:
+            return 0
+
+        from passive_agent.storage.models import EnrichedItem
+
+        limit = self.config.scoring.daily_limit
+        recommended.sort(key=lambda i: (i.priority_score or 0, i.created_at), reverse=True)
+        to_push = recommended[:limit]
+
+        ranker = Ranker(
+            self.db,
+            related_zotero_limit=self.config.recommendations.related_zotero_limit,
+            related_stars_limit=self.config.recommendations.related_stars_limit,
+        )
+        enriched = ranker.enrich(to_push)
+        if feishu_bot.send_daily_card(enriched):
+            return len(enriched)
+        return 0
 
     def _output_daily_review(self, enriched: list[EnrichedItem]):
         reports_dir = Path(self.config.reports_dir)
