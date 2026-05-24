@@ -297,9 +297,19 @@ class DailyPipeline:
             related_stars_limit=self.config.recommendations.related_stars_limit,
         )
         enriched = ranker.enrich(to_push)
+        # 去重跨条目的关联推荐（多条推送条目可能关联到同一篇归档文章）
+        self._deduplicate_related(enriched)
         if feishu_bot.send_daily_card(enriched):
             return len(enriched)
         return 0
+
+    @staticmethod
+    def _deduplicate_related(enriched: list[EnrichedItem]) -> None:
+        seen_zotero: set[str] = set()
+        seen_stars: set[str] = set()
+        for e in enriched:
+            e.related_zotero = [t for t in e.related_zotero if t not in seen_zotero and not seen_zotero.add(t)]
+            e.related_stars = [t for t in e.related_stars if t not in seen_stars and not seen_stars.add(t)]
 
     def _output_daily_review(self, enriched: list[EnrichedItem]):
         reports_dir = Path(self.config.reports_dir)
