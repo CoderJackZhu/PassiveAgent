@@ -46,10 +46,14 @@ class Ranker:
 
         all_items = self.db.get_items_by_stage("archived")
         related = []
+        seen: set[str] = set()
         for existing in all_items:
             if existing.id == item.id:
                 continue
+            if existing.title in seen:
+                continue
             if any(t in existing.topics for t in item.topics):
+                seen.add(existing.title)
                 related.append(existing.title)
                 if len(related) >= self.related_zotero_limit:
                     break
