@@ -116,10 +116,22 @@ uv run passive-agent action item_20260522_002 --type weekend
 
 ## 数据源配置
 
-所有配置集中在项目根目录的 `config.yaml` 中，按 `goals` / `sources` / `scoring` 三个顶层 key 区分。详见 [docs/configuration.md](docs/configuration.md)。
+所有配置集中在项目根目录的 `config.yaml` 中，按 `runtime` / `llm` / `goals` / `sources` / `recommendations` / `display` / `feishu` / `scoring` 八个顶层 key 区分。详见 [docs/configuration.md](docs/configuration.md)。
 
 ```yaml
 # config.yaml 结构概览
+runtime:
+  db_path: "data/workbench.db"
+  reports_dir: "data/reports"
+  prompts_dir: "prompts"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  temperature: 0.3
+  max_concurrency: 5
+  max_retries: 3
+
 goals:
   current_focus: "Agent 算法岗面试准备"
   priority_topics: [...]
@@ -129,6 +141,7 @@ sources:
   zotero:
     enabled: true
     db_path: "~/Zotero/zotero.sqlite"
+    sqlite_timeout_seconds: 30.0
     ...
   obsidian:
     enabled: true
@@ -136,11 +149,31 @@ sources:
     ...
   github_stars:
     enabled: true
+    max_pages: 10
+    per_page: 100
+    ...
+  hf_daily:
+    enabled: true
+    max_papers: 30
+    lookback_days: 30
+    ...
+
+recommendations:
+  stale_after_days: 7
+  related_zotero_limit: 3
+  related_stars_limit: 3
+
+display:
+  dashboard_limit: 10
+  manual_push_limit: 5
+
+feishu:
+  async_timeout_seconds: 60.0
 
 scoring:
   weights: { goal_relevance: 0.30, ... }
   daily_limit: 3
-  negative_feedback: { ... }
+  negative_feedback: { topic_threshold: 3, topic_window: 10, ... }
 ```
 
 GitHub Stars 用法：
