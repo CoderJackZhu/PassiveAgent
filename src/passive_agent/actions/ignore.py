@@ -37,9 +37,17 @@ class IgnoreAction:
                 item_id=item_id,
                 action="ignore",
                 topic=topic,
-                source=item.source,
+                source=None,
                 created_at=datetime.now(),
             ))
+        self.db.save_feedback(FeedbackRecord(
+            id=None,
+            item_id=item_id,
+            action="ignore",
+            topic=None,
+            source=item.source,
+            created_at=datetime.now(),
+        ))
 
         if self.feedback_engine:
             self.feedback_engine.update_on_ignore(item)

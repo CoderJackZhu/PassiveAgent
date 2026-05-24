@@ -58,14 +58,39 @@ class Summarizer:
             user=prompt,
         )
 
-        item.summary = data.get("summary", "")
-        item.interview_relevance = data.get("interview_relevance", "")
-        item.recommended_action = data.get("recommended_action", "read")
-        item.estimated_minutes = data.get("estimated_minutes", 15)
-        item.content_type = data.get("content_type", "article")
+        if not isinstance(data, dict):
+            log.warning(f"Summary LLM returned non-object for '{item.title}': {type(data).__name__}")
+            data = {}
+
+        item.summary = _as_string(data.get("summary"), "")
+        item.interview_relevance = _as_string(data.get("interview_relevance"), "")
+        item.recommended_action = _as_string(data.get("recommended_action"), "read")
+        item.estimated_minutes = _as_int(data.get("estimated_minutes"), 15, item.title)
+        item.content_type = _as_string(data.get("content_type"), "article")
         item.stage = "summarized"
 
-        if data.get("topics"):
-            item.topics = data["topics"]
+        if "topics" in data:
+            item.topics = _as_string_list(data.get("topics"), item.topics, item.title)
 
         return item
+
+
+def _as_string(value, default: str) -> str:
+    return value if isinstance(value, str) else default
+
+
+def _as_int(value, default: int, title: str) -> int:
+    if isinstance(value, bool):
+        log.warning(f"Invalid estimated_minutes for '{title}': bool")
+        return default
+    if isinstance(value, int):
+        return value
+    log.warning(f"Invalid estimated_minutes for '{title}': {value!r}")
+    return default
+
+
+def _as_string_list(value, default: list[str], title: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(topic, str) for topic in value):
+        log.warning(f"Invalid topics for '{title}': {value!r}")
+        return default
+    return value

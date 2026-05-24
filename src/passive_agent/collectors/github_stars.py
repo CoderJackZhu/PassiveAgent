@@ -102,15 +102,23 @@ class GitHubStarsInitializer:
         repos = []
         async with httpx.AsyncClient(headers=self.headers, timeout=self.http_timeout_seconds) as client:
             for page in range(1, max_pages + 1):
-                resp = await client.get(
-                    f"{GITHUB_API}/user/starred",
-                    params={"page": page, "per_page": self.per_page},
-                )
+                try:
+                    resp = await client.get(
+                        f"{GITHUB_API}/user/starred",
+                        params={"page": page, "per_page": self.per_page},
+                    )
+                except httpx.HTTPError as e:
+                    log.warning(f"GitHub stars page {page} request failed: {e}")
+                    continue
                 if resp.status_code != 200:
                     log.error(f"GitHub API error: {resp.status_code}")
                     break
 
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except ValueError as e:
+                    log.warning(f"GitHub stars page {page} returned invalid JSON: {e}")
+                    continue
                 if not data:
                     break
 

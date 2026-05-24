@@ -5,9 +5,10 @@ from passive_agent.utils.config import load_config
 
 def test_load_config(config_dir):
     config = load_config(config_dir)
+    root = Path(config_dir).resolve()
 
-    assert config.runtime.db_path == "data/workbench.db"
-    assert config.db_path == "data/workbench.db"
+    assert config.runtime.db_path == str(root / "data/workbench.db")
+    assert config.db_path == str(root / "data/workbench.db")
     assert config.llm.provider == "deepseek"
     assert config.llm.api_key_env == "DEEPSEEK_API_KEY"
     assert config.recommendations.stale_after_days == 7
@@ -75,12 +76,13 @@ scoring:
 """, encoding="utf-8")
 
     config = load_config(str(tmp_path))
+    root = tmp_path.resolve()
 
-    assert config.runtime.db_path == "custom/workbench.db"
-    assert config.db_path == "custom/workbench.db"
-    assert config.runtime.reports_dir == "custom/reports"
-    assert config.reports_dir == "custom/reports"
-    assert config.prompts_dir == "custom/prompts"
+    assert config.runtime.db_path == str(root / "custom/workbench.db")
+    assert config.db_path == str(root / "custom/workbench.db")
+    assert config.runtime.reports_dir == str(root / "custom/reports")
+    assert config.reports_dir == str(root / "custom/reports")
+    assert config.prompts_dir == str(root / "custom/prompts")
     assert config.llm.api_key_env == "CUSTOM_DEEPSEEK_KEY"
     assert config.llm.base_url == "https://llm.example.test"
     assert config.llm.model == "custom-model"
@@ -135,7 +137,7 @@ runtime:
     import os
 
     assert config.goals.current_focus == "from explicit file"
-    assert config.db_path == "explicit-file.db"
+    assert config.db_path == str(tmp_path.resolve() / "explicit-file.db")
     assert config.project_root == str(tmp_path.resolve())
     assert os.environ["FEISHU_CHAT_ID"] == "from_explicit_file"
 
@@ -151,7 +153,7 @@ runtime:
 
     config = load_config(str(tmp_path / "ignored"))
 
-    assert config.db_path == "explicit-dir.db"
+    assert config.db_path == str(config_dir.resolve() / "explicit-dir.db")
     assert config.project_root == str(config_dir.resolve())
 
 

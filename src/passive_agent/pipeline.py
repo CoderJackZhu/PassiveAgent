@@ -40,7 +40,7 @@ class DailyPipeline:
         self.db = db
         self.llm = llm
         self.feishu_bot = feishu_bot
-        self.prompts_dir = str(Path(config.project_root) / config.prompts_dir) if config.project_root else config.prompts_dir
+        self.prompts_dir = config.prompts_dir
         self.normalizer = Normalizer(db, config.sources.zotero.high_priority_collections)
         self.deduplicator = Deduplicator(db)
 

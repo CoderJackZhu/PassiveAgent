@@ -4,11 +4,16 @@ from pathlib import Path
 
 
 class ObsidianWriter:
-    def __init__(self, vault_path: str):
+    def __init__(self, vault_path: str, inbox_path: str | None = None):
         if not vault_path:
             raise ValueError("vault_path is required")
         self.vault = Path(vault_path).expanduser()
         self.vault.mkdir(parents=True, exist_ok=True)
+        if inbox_path:
+            inbox = Path(inbox_path).expanduser()
+            self.inbox_path = inbox if inbox.is_absolute() else self.vault / inbox
+        else:
+            self.inbox_path = self.vault / "00-Inbox" / "inbox.md"
 
     def write_interview_card(self, topic: str, title: str, content: str) -> Path:
         dir_path = self.vault / "01-Interview" / self._safe_dirname(topic)
@@ -27,7 +32,7 @@ class ObsidianWriter:
         return file_path
 
     def mark_inbox_done(self, raw_text: str) -> bool:
-        inbox_path = self.vault / "00-Inbox" / "inbox.md"
+        inbox_path = self.inbox_path
         if not inbox_path.exists():
             return False
 

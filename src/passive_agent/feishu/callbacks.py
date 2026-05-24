@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from jinja2 import Environment, FileSystemLoader
 
 from passive_agent.actions.ignore import IgnoreAction
@@ -23,8 +21,11 @@ class CallbackHandler:
         self.config = config
         self.db = db
         self.llm = llm
-        self.writer = ObsidianWriter(config.sources.obsidian.vault_path)
-        self.prompts_dir = str(Path(config.project_root) / config.prompts_dir) if config.project_root else config.prompts_dir
+        self.writer = ObsidianWriter(
+            config.sources.obsidian.vault_path,
+            config.sources.obsidian.inbox_path,
+        )
+        self.prompts_dir = config.prompts_dir
         self.jinja = Environment(loader=FileSystemLoader(self.prompts_dir))
 
     async def handle(self, action_value: dict) -> dict | None:
@@ -131,6 +132,13 @@ class CallbackHandler:
         item = self.db.get_item(item_id)
         if not item:
             return None
+
+        current_queue = self.db.get_weekend_queue()
+        if len(current_queue) >= self.config.scoring.weekend_limit:
+            return {
+                "type": "toast",
+                "text": f"周末队列已满 ({self.config.scoring.weekend_limit} 条)",
+            }
 
         self.db.conn.execute(
             "UPDATE items SET is_weekend = 1 WHERE id = ?", (item_id,)

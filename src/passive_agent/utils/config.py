@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from passive_agent.utils.logger import log
+
 
 @dataclass
 class RuntimeConfig:
@@ -235,6 +237,11 @@ def load_config(config_dir: str = "config") -> AppConfig:
         reports_dir=runtime_data.get("reports_dir", unified.get("reports_dir", "data/reports")),
         prompts_dir=runtime_data.get("prompts_dir", unified.get("prompts_dir", "prompts")),
     )
+    runtime = RuntimeConfig(
+        db_path=_resolve_runtime_path(runtime.db_path, project_root),
+        reports_dir=_resolve_runtime_path(runtime.reports_dir, project_root),
+        prompts_dir=_resolve_runtime_path(runtime.prompts_dir, project_root),
+    )
 
     llm = LLMConfig(
         provider=llm_data.get("provider", "deepseek"),
@@ -285,7 +292,18 @@ def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        log.warning(f"Ignoring config file with invalid top-level shape: {path}")
+        return {}
+    return data
+
+
+def _resolve_runtime_path(value: str, project_root: Path) -> str:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = project_root / path
+    return str(path.expanduser().resolve())
 
 
 def _resolve_explicit_config(config_location: str) -> tuple[Path, Path]:

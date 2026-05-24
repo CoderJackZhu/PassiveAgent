@@ -109,8 +109,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_log_date ON daily_log(date);
 
 
 class Database:
-    def __init__(self, db_path: str):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str | Path = "data/workbench.db"):
+        self.db_path = Path(db_path).expanduser().resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
 

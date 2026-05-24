@@ -66,25 +66,35 @@ class Scorer:
             system="你是面试内容评分器，严格输出 JSON 评分。",
             user=prompt,
         )
+        if not isinstance(data, dict):
+            log.warning(f"Score LLM returned non-object for '{item.title}': {type(data).__name__}")
+            data = {}
+
+        goal_relevance = _as_score(data.get("goal_relevance"), "goal_relevance", item.title)
+        novelty = _as_score(data.get("novelty"), "novelty", item.title)
+        actionability = _as_score(data.get("actionability"), "actionability", item.title)
+        difficulty_fit = _as_score(data.get("difficulty_fit"), "difficulty_fit", item.title)
+        source_quality = _as_score(data.get("source_quality"), "source_quality", item.title)
+        timeliness = _as_score(data.get("timeliness"), "timeliness", item.title)
 
         w = self.scoring.weights
         weighted_total = (
-            data.get("goal_relevance", 50) * w.goal_relevance +
-            data.get("novelty", 50) * w.novelty +
-            data.get("actionability", 50) * w.actionability +
-            data.get("difficulty_fit", 50) * w.difficulty_fit +
-            data.get("source_quality", 50) * w.source_quality +
-            data.get("timeliness", 50) * w.timeliness
+            goal_relevance * w.goal_relevance +
+            novelty * w.novelty +
+            actionability * w.actionability +
+            difficulty_fit * w.difficulty_fit +
+            source_quality * w.source_quality +
+            timeliness * w.timeliness
         )
 
         score = Score(
             item_id=item.id,
-            goal_relevance=data.get("goal_relevance", 50),
-            novelty=data.get("novelty", 50),
-            actionability=data.get("actionability", 50),
-            difficulty_fit=data.get("difficulty_fit", 50),
-            source_quality=data.get("source_quality", 50),
-            timeliness=data.get("timeliness", 50),
+            goal_relevance=goal_relevance,
+            novelty=novelty,
+            actionability=actionability,
+            difficulty_fit=difficulty_fit,
+            source_quality=source_quality,
+            timeliness=timeliness,
             weighted_total=weighted_total,
         )
         self.db.save_score(score)
@@ -108,3 +118,13 @@ class Scorer:
         sw = self.db.get_source_weight(item.source)
         adjustment *= sw
         return adjustment
+
+
+def _as_score(value, field: str, title: str) -> float:
+    if isinstance(value, bool):
+        log.warning(f"Invalid score {field} for '{title}': bool")
+        return 50.0
+    if isinstance(value, int | float):
+        return float(value)
+    log.warning(f"Invalid score {field} for '{title}': {value!r}")
+    return 50.0

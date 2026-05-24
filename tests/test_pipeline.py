@@ -155,6 +155,7 @@ async def test_daily_pipeline_records_actual_push_count(
     config = load_config(config_dir)
     config.project_root = ""
     config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
 
     raw = RawItem(source="zotero", title=f"Agent Memory {bot_result}", url="https://example.com/a")
     bot = FakeBot(bot_result)

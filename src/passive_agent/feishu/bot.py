@@ -137,9 +137,12 @@ class FeishuBot:
                 chat_id = open_chat_id or self.chat_id
 
                 def _process_slow():
+                    thread_db = Database(self.config.db_path)
                     try:
+                        thread_db.initialize()
+                        callback_handler = CallbackHandler(self.config, thread_db, self.llm)
                         result = _run_async(
-                            self.callback_handler.handle(action_value),
+                            callback_handler.handle(action_value),
                             timeout_seconds=self.config.feishu.async_timeout_seconds,
                         )
                         if result and result.get("type") == "new_message" and chat_id:
@@ -148,6 +151,8 @@ class FeishuBot:
                         log.error(f"Background card action failed: {e}")
                         if chat_id:
                             self._reply_text(chat_id, f"处理失败：{e}")
+                    finally:
+                        thread_db.close()
 
                 import threading
                 threading.Thread(target=_process_slow, daemon=True).start()

@@ -631,8 +631,11 @@ def action(ctx, item_id: str, action_type: str):
         from passive_agent.actions.base import ActionResult
         from passive_agent.integrations.obsidian_writer import ObsidianWriter
 
-        writer = ObsidianWriter(config.sources.obsidian.vault_path)
-        prompts_dir = os.path.join(config.project_root, config.prompts_dir) if config.project_root else config.prompts_dir
+        writer = ObsidianWriter(
+            config.sources.obsidian.vault_path,
+            config.sources.obsidian.inbox_path,
+        )
+        prompts_dir = config.prompts_dir
 
         if action_type in ("card", "note"):
             llm = _build_llm(config, required=True)

@@ -77,11 +77,22 @@ class Item:
 
         topics = row.get("topics")
         if isinstance(topics, str):
-            topics = json.loads(topics)
+            try:
+                topics = json.loads(topics)
+            except (json.JSONDecodeError, TypeError):
+                topics = []
+        if not isinstance(topics, list):
+            topics = []
+        topics = [topic for topic in topics if isinstance(topic, str)]
 
         extra_meta = row.get("extra_meta")
         if isinstance(extra_meta, str):
-            extra_meta = json.loads(extra_meta)
+            try:
+                extra_meta = json.loads(extra_meta)
+            except (json.JSONDecodeError, TypeError):
+                extra_meta = {}
+        if not isinstance(extra_meta, dict):
+            extra_meta = {}
 
         return cls(
             id=row["id"],
