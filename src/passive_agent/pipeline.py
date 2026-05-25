@@ -189,6 +189,9 @@ class DailyPipeline:
 
             # 7. Enrich
             enriched = ranker.enrich(top_items)
+            # Avoid repeating the same archived Zotero article at the end of the Feishu card
+            # when several new recommendations share the same first related item.
+            self._deduplicate_related(enriched)
 
             # 8. 持久化所有已处理条目
             for item in scored:

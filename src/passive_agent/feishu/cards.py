@@ -61,8 +61,13 @@ class CardBuilder:
 
         # 相关旧文章提示
         all_related = []
+        seen_related: set[str] = set()
         for e in items:
-            all_related.extend(e.related_zotero[:1])
+            for title in e.related_zotero[:1]:
+                if title in seen_related:
+                    continue
+                seen_related.add(title)
+                all_related.append(title)
         if all_related:
             elements.append({"tag": "hr"})
             related_text = "\n".join(f"· {t}" for t in all_related[:3])

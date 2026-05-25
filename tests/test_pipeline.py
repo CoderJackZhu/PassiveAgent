@@ -177,6 +177,50 @@ async def test_daily_pipeline_records_actual_push_count(
     assert bool(errors) is expect_error
 
 
+@pytest.mark.asyncio
+async def test_daily_pipeline_deduplicates_related_zotero_across_new_push_batch(config_dir, db, tmp_path):
+    config = load_config(config_dir)
+    config.project_root = ""
+    config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
+    config.scoring.daily_limit = 3
+    config.recommendations.related_zotero_limit = 1
+
+    db.save_item(Item(
+        id="archived-sft-rl",
+        source="zotero",
+        title="探索为什么要融合SFT和RL，以及应该怎么融合",
+        topics=["Agent"],
+        stage="archived",
+    ))
+
+    class RecordingBot:
+        def __init__(self):
+            self.items: list[EnrichedItem] = []
+
+        def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
+            self.items = items
+            return True
+
+    raw_items = [
+        RawItem(source="zotero", title=title, url=f"https://example.com/{i}")
+        for i, title in enumerate([
+            "Agent Memory Architecture",
+            "Retrieval Evaluation Playbook",
+            "Alignment Training Recipe",
+        ])
+    ]
+    bot = RecordingBot()
+    pipeline = DailyPipeline(config, db, llm=FakeLLM(), feishu_bot=bot)
+    pipeline._init_collectors = lambda: [FakeCollector(raw_items)]
+
+    result = await pipeline.run()
+
+    assert result.status == "success"
+    related = [title for enriched in bot.items for title in enriched.related_zotero]
+    assert related == ["探索为什么要融合SFT和RL，以及应该怎么融合"]
+
+
 def test_daily_review_includes_structured_metrics(config_dir, db, tmp_path):
     config = load_config(config_dir)
     config.reports_dir = str(tmp_path / "reports")
@@ -282,3 +326,19 @@ def test_ranker_enriches_items_with_related_github_stars_and_card_wording(db):
     card = CardBuilder.build_daily_card(enriched)
     content = "\n".join(element.get("content", "") for element in card["elements"])
     assert "相关 GitHub Star" in content
+
+
+def test_daily_card_deduplicates_related_zotero_footer():
+    duplicate_title = "探索为什么要融合SFT和RL，以及应该怎么融合"
+    items = [
+        EnrichedItem(
+            item=Item(id=f"item-{i}", source="zotero", title=f"Recommended {i}"),
+            related_zotero=[duplicate_title],
+        )
+        for i in range(3)
+    ]
+
+    card = CardBuilder.build_daily_card(items)
+    content = "\n".join(element.get("content", "") for element in card["elements"])
+
+    assert content.count(duplicate_title) == 1
