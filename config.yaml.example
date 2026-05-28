@@ -11,10 +11,10 @@ runtime:
 
 # ---- LLM ----
 llm:
-  provider: "deepseek"
-  api_key_env: "DEEPSEEK_API_KEY"  # 环境变量名，不在 YAML 中写密钥
-  base_url: "https://api.deepseek.com"
-  model: "deepseek-chat"
+  provider: "openai_compatible"           # deepseek | openai_compatible
+  api_key_env: "XIAOMI_API_KEY"           # 环境变量名，不在 YAML 中写密钥
+  base_url: "https://token-plan-cn.xiaomimimo.com/v1"
+  model: "mimo-v2.5-pro"
   temperature: 0.3
   max_concurrency: 5
   max_retries: 3

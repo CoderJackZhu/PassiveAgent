@@ -27,7 +27,7 @@ read_dotenv_value() {
     [[ -f "$env_file" ]] || return 1
 
     (
-        unset FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID DEEPSEEK_API_KEY GITHUB_TOKEN
+        unset FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID XIAOMI_API_KEY XIAOMI_BASE_URL DEEPSEEK_API_KEY GITHUB_TOKEN
         set -a
         # shellcheck disable=SC1090
         source "$env_file" >/dev/null 2>&1 || exit 1
@@ -44,7 +44,7 @@ append_env_to_plist() {
     local value
     local has_env=0
 
-    for key in FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID DEEPSEEK_API_KEY GITHUB_TOKEN; do
+    for key in FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_CHAT_ID XIAOMI_API_KEY XIAOMI_BASE_URL DEEPSEEK_API_KEY GITHUB_TOKEN; do
         if value="$(read_dotenv_value "$key")"; then
             if [[ "$has_env" -eq 0 ]]; then
                 /usr/libexec/PlistBuddy -c "Print :EnvironmentVariables" "$plist" >/dev/null 2>&1 \
@@ -135,7 +135,7 @@ main() {
     echo "  - com.passive-agent.weekend  (每周六 10:00 推送周末队列)"
     echo ""
     echo "Tip: non-empty values from .env are written into the plists for:"
-    echo "  DEEPSEEK_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_ID, GITHUB_TOKEN"
+    echo "  XIAOMI_API_KEY, XIAOMI_BASE_URL, DEEPSEEK_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_ID, GITHUB_TOKEN"
     echo ""
     echo "管理命令:"
     echo "  launchctl list | grep passive-agent"

@@ -41,7 +41,8 @@ def _init_feishu_bot(config, db, llm=None, *, require_chat_id: bool = False):
 
 
 def _build_llm(config, *, required: bool = False):
-    if config.llm.provider != "deepseek":
+    supported_providers = {"deepseek", "openai_compatible"}
+    if config.llm.provider not in supported_providers:
         message = f"LLM provider '{config.llm.provider}' is not supported"
         if required:
             raise click.ClickException(message)

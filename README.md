@@ -45,7 +45,8 @@ cp config.yaml.example config.yaml
 ### 3. 环境变量
 
 ```bash
-export DEEPSEEK_API_KEY="your-key"          # LLM 摘要/打分（必需）
+export XIAOMI_API_KEY="your-token-plan-key" # LLM 摘要/打分（必需；当前默认使用小米 MiMo）
+export XIAOMI_BASE_URL="https://token-plan-cn.xiaomimimo.com/v1"  # 可选，需与订阅页区域一致
 export GITHUB_TOKEN="your-token"            # GitHub Stars 导入（可选）
 export ZOTERO_API_KEY="your-key"            # Zotero tag 回写（可选）
 export FEISHU_APP_ID="your-app-id"          # 飞书推送（可选）
@@ -102,7 +103,7 @@ uv run passive-agent daily
 
 ### 获取和验证 `FEISHU_CHAT_ID`
 
-先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY`，运行：
+先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`XIAOMI_API_KEY`，运行：
 
 ```bash
 uv run passive-agent serve
@@ -175,8 +176,10 @@ runtime:
   prompts_dir: "prompts"
 
 llm:
-  provider: "deepseek"
-  model: "deepseek-chat"
+  provider: "openai_compatible"
+  api_key_env: "XIAOMI_API_KEY"
+  base_url: "https://token-plan-cn.xiaomimimo.com/v1"
+  model: "mimo-v2.5-pro"
   temperature: 0.3
   max_concurrency: 5
   max_retries: 3
@@ -309,8 +312,10 @@ scripts/install_launchd.sh` 覆盖。
     </dict>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>DEEPSEEK_API_KEY</key>
-        <string>your-key</string>
+        <key>XIAOMI_API_KEY</key>
+        <string>your-token-plan-key</string>
+        <key>XIAOMI_BASE_URL</key>
+        <string>https://token-plan-cn.xiaomimimo.com/v1</string>
         <key>FEISHU_APP_ID</key>
         <string>your-app-id</string>
         <key>FEISHU_APP_SECRET</key>
@@ -334,7 +339,7 @@ launchctl load ~/Library/LaunchAgents/com.passive-agent.daily.plist
 
 - Python 3.11+
 - SQLite (WAL mode)
-- DeepSeek API (摘要/评分/分类)
+- OpenAI-compatible LLM API（当前默认小米 MiMo，用于摘要/评分/分类）
 - Zotero Web API (tag 回写)
 - 飞书开放平台 (推送/交互)
 - Click (CLI)

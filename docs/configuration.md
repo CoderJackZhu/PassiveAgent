@@ -38,17 +38,17 @@ runtime:
 
 ```yaml
 llm:
-  provider: "deepseek"                      # 目前仅支持 deepseek
-  api_key_env: "DEEPSEEK_API_KEY"           # 从哪个环境变量读取 API Key
-  base_url: "https://api.deepseek.com"      # API 地址
-  model: "deepseek-chat"                    # 模型名
+  provider: "openai_compatible"             # deepseek | openai_compatible
+  api_key_env: "XIAOMI_API_KEY"             # 从哪个环境变量读取 API Key
+  base_url: "https://token-plan-cn.xiaomimimo.com/v1"  # API 地址，需与订阅页区域一致
+  model: "mimo-v2.5-pro"                    # 模型名
   temperature: 0.3                          # 生成温度 (0–1)
   max_concurrency: 5                        # 最大并发请求数
   max_retries: 3                            # 失败重试次数
   retry_backoff_base_seconds: 2.0           # 重试退避基础秒数
 ```
 
-**注意**：`api_key_env` 只是环境变量名，真正的密钥通过 `.env` 或系统环境变量设置，不要写在 YAML 里。
+**注意**：`api_key_env` 只是环境变量名，真正的密钥通过 `.env` 或系统环境变量设置，不要写在 YAML 里。当前线上配置使用小米 MiMo Token Plan；`tp-...` key 必须配 Token Plan 专用 Base URL，不能和 pay-as-you-go 的 `sk-...` key/endpoint 混用。
 
 ## goals 部分
 
@@ -226,7 +226,9 @@ scoring:
 | 变量 | 必需 | 说明 |
 |------|------|------|
 | `PASSIVE_AGENT_CONFIG` | 否 | 自定义配置文件路径（文件或目录），优先级高于默认位置 |
-| `DEEPSEEK_API_KEY` | 是 | DeepSeek API，用于摘要/打分/分类 |
+| `XIAOMI_API_KEY` | 是 | 当前默认 LLM API Key，用于摘要/打分/分类 |
+| `XIAOMI_BASE_URL` | 否 | 小米 Token Plan Base URL，需与订阅页区域一致 |
+| `DEEPSEEK_API_KEY` | 否 | DeepSeek 兼容别名/回退配置使用 |
 | `GITHUB_TOKEN` | 否 | GitHub Stars 导入 |
 | `ZOTERO_API_KEY` | 否 | Zotero tag 回写 |
 | `FEISHU_APP_ID` | 否 | 飞书 Bot 推送 |
