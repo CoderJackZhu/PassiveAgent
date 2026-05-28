@@ -134,14 +134,33 @@ uv run passive-agent feishu-push --stage recommended --limit 5
 - **只配了 App ID/Secret 不够**：发消息、收消息、卡片按钮分别依赖不同权限/事件订阅。
 - **改完权限/事件必须发布版本**：否则本地 `serve` 重启也不会收到新事件。
 - **`FEISHU_CHAT_ID` 必须来自目标会话**：从 A 会话自动识别出的 chat_id，不能拿去给 Bot 不在其中的 B 群主动推送。
-- **系统代理可能影响长连接重连**：如果 macOS/launchd 环境里有 `HTTP_PROXY` / `HTTPS_PROXY` 指向本机代理（如 `127.0.0.1:7897`），而代理短暂不可用，飞书 WebSocket 可能断线后重连失败。建议在 launchd plist 或启动环境里加：
+- **系统代理可能影响长连接重连**：如果 macOS/launchd 环境里有 `HTTP_PROXY` / `HTTPS_PROXY` 指向本机代理（如 `127.0.0.1:7897`），而代理短暂不可用，飞书 WebSocket 可能断线后重连失败。
 
-```bash
-NO_PROXY="open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost"
-no_proxy="$NO_PROXY"
-```
+  典型现象：
+  1. `serve` 启动后能连上，但机器休眠/网络切换后长时间不自动恢复；
+  2. 日志里没有新的 `Received message ...`，但本地网络本身是通的；
+  3. 手动在当前 shell 运行 `uv run passive-agent serve` 正常，launchd 却反复断。
 
-验证长连接是否正常：`serve` 日志里应出现连接成功；飞书发「状态」或「推送」后，日志应出现 `Received message ...`。
+  排查顺序：
+  1. 先查 launchd 实际环境：`launchctl print gui/$(id -u)/com.passive-agent.serve`；
+  2. 看 `data/reports/serve_stdout.log` / `serve_stderr.log` 是否有重连或代理相关报错；
+  3. 确认本机代理是否只对部分域名生效，或者代理进程重启/崩溃过。
+
+  建议在 `~/Library/LaunchAgents/com.passive-agent.serve.plist` 的 `EnvironmentVariables` 里显式加：
+
+  ```xml
+  <key>NO_PROXY</key>
+  <string>open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost</string>
+  <key>no_proxy</key>
+  <string>open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost</string>
+  ```
+
+  如果确实使用代理，也建议把 `HTTP_PROXY` / `HTTPS_PROXY` 写进同一个 plist，而不是只依赖 shell/zshrc；launchd 不会自动继承你的交互式 shell 配置。
+
+  快速验证：
+  1. `launchctl bootout gui/$(id -u)/com.passive-agent.serve || true`
+  2. `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.passive-agent.serve.plist`
+  3. 飞书发「状态」或「推送」，确认 `serve` 日志里出现 `Received message ...`。
 
 ## 用户操作
 
