@@ -83,7 +83,42 @@ uv run passive-agent daily
 | `serve` | 启动飞书 Bot 长连接服务 |
 | `init-db` | 初始化数据库 |
 
-飞书说明：`daily` 和 `weekend-push` 是一次性主动推送，必须设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID`。`serve` 是飞书长连接服务，用于接收消息和处理卡片按钮，需要单独常驻运行。
+## 飞书配置与权限
+
+`daily` 和 `weekend-push` 是一次性主动推送，必须设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID`。`serve` 是飞书长连接服务，用于接收消息和处理卡片按钮，需要单独常驻运行。
+
+### 飞书开放平台设置
+
+1. 在飞书开放平台创建企业自建应用，并启用机器人能力。
+2. 在「凭证与基础信息」中复制 `App ID` / `App Secret`，分别写入 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。
+3. 在「权限管理」中至少开通以下权限，并发布新版本：
+   - 发送消息：`im:message:send_as_bot`（以应用的身份发消息）或 `im:message`（获取与发送单聊、群组消息）。
+   - 接收单聊消息：`im:message.p2p_msg` 或 `im:message.p2p_msg:readonly`。
+   - 如需在群聊里使用：`im:message.group_at_msg` 或 `im:message.group_at_msg:readonly`（接收群聊中 @ 机器人的消息）。
+4. 在「事件与回调」中使用长连接 / WebSocket 模式，并订阅：
+   - `im.message.receive_v1`（接收消息）：用于处理「推送」「暂停」「恢复」「详情 <id>」等文本命令。
+   - `card.action.trigger`（卡片回传交互）：用于处理卡片按钮。部分旧版控制台里名称可能显示为 `card.action.trigger_v1` /「消息卡片回传交互（旧）」。
+5. 修改权限或事件后，必须发布新版本，并在租户侧重新启用/升级应用；只在开发后台勾选但不发布，线上 Bot 不会生效。
+
+### 获取和验证 `FEISHU_CHAT_ID`
+
+先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY`，运行：
+
+```bash
+uv run passive-agent serve
+```
+
+然后在飞书里给机器人发一条消息。日志会输出：
+
+```text
+Auto-detected chat_id: ...
+```
+
+把这个值写入 `FEISHU_CHAT_ID`。如果推送到群聊，必须把机器人加入同一个群，并确认机器人在群里有发言权限；否则主动发送会失败，典型报错是：
+
+```text
+230002 - Bot/User can NOT be out of the chat
+```
 
 可先用以下命令验证飞书配置是否能发消息：
 
@@ -91,7 +126,21 @@ uv run passive-agent daily
 uv run passive-agent feishu-push --stage recommended --limit 5
 ```
 
-获取 `FEISHU_CHAT_ID`：先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY`，运行 `uv run passive-agent serve`，然后在飞书里给机器人发一条消息；日志会输出 `Auto-detected chat_id: ...`，把这个值写入 `FEISHU_CHAT_ID`。
+再点击卡片按钮，日志应出现 `Card action: ...`。如果能收到卡片但点击按钮没反应，优先检查是否已订阅并发布 `card.action.trigger` / `card.action.trigger_v1`。
+
+### 常见踩坑
+
+- **只配了 App ID/Secret 不够**：发消息、收消息、卡片按钮分别依赖不同权限/事件订阅。
+- **改完权限/事件必须发布版本**：否则本地 `serve` 重启也不会收到新事件。
+- **`FEISHU_CHAT_ID` 必须来自目标会话**：从 A 会话自动识别出的 chat_id，不能拿去给 Bot 不在其中的 B 群主动推送。
+- **系统代理可能影响长连接重连**：如果 macOS/launchd 环境里有 `HTTP_PROXY` / `HTTPS_PROXY` 指向本机代理（如 `127.0.0.1:7897`），而代理短暂不可用，飞书 WebSocket 可能断线后重连失败。建议在 launchd plist 或启动环境里加：
+
+```bash
+NO_PROXY="open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost"
+no_proxy="$NO_PROXY"
+```
+
+验证长连接是否正常：`serve` 日志里应出现连接成功；飞书发「状态」或「推送」后，日志应出现 `Received message ...`。
 
 ## 用户操作
 
