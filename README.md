@@ -1,30 +1,24 @@
 # Passive Agent Workbench
 
-个人注意力调度系统 — 从信息池中筛选高价值内容，碎片时间 review，确认后沉淀为可复用知识。
+> 每天从 Zotero、Obsidian、HuggingFace Daily、GitHub Stars 里挑出少量真正值得看的内容，并推送到飞书或在终端里查看。
 
-## 解决什么问题
+信息过载时，问题通常不是“没有资料”，而是“不知道今天先看哪几个”。Passive Agent 会帮你完成：采集 → 去重 → 摘要 → 打分 → 推荐 → 反馈降权。
 
-信息过载不是缺资料，而是不知道先看什么。本系统每天从 Zotero、Obsidian、GitHub Stars 中自动筛选少量高价值条目推送给你，你只需碎片时间做一个决策（生成卡片 / 忽略 / 加入周末），系统负责执行和归档。
-
-## 核心流程
-
-```
-Zotero / Obsidian / GitHub Stars
-        ↓
-   采集 + 去重
-        ↓
-  LLM 摘要 + 打分
-        ↓
-   Top N 推送（飞书）
-        ↓
-  你回复：卡片 / 忽略 / 周末
-        ↓
-   系统执行 + 归档
+```text
+资料来源 → 去重 → LLM 摘要/打分 → Top N 推荐 → 你选择：看 / 忽略 / 周末读 / 生成卡片
 ```
 
-## 快速开始
+## 适合谁
 
-### 1. 安装
+- 你有一堆论文、文章、GitHub 项目，但每天只想看最重要的 3 个。
+- 你在准备 Agent / LLM / 算法工程相关面试，需要持续积累高价值材料。
+- 你希望“少推类似”这种反馈能影响后续推荐，而不是每天重复刷到不想看的东西。
+
+## 5 分钟跑起来
+
+下面是最短路径：先本地跑通，再决定要不要接飞书和定时任务。
+
+### 1. 安装依赖
 
 ```bash
 git clone https://github.com/CoderJackZhu/PassiveAgent.git
@@ -32,337 +26,348 @@ cd PassiveAgent
 uv sync
 ```
 
-`uv sync` 会把 CLI 安装到项目虚拟环境中。后续命令建议使用 `uv run passive-agent ...`；如果想直接运行 `passive-agent ...`，需要先执行 `source .venv/bin/activate`。
+后续命令都用 `uv run passive-agent ...`。如果你已经 `source .venv/bin/activate`，也可以直接用 `passive-agent ...`。
 
-### 2. 配置
-
-复制示例配置并按需修改：
+### 2. 创建配置文件
 
 ```bash
 cp config.yaml.example config.yaml
+cp .env.example .env
 ```
 
-### 3. 环境变量
+先不用理解 `config.yaml` 的全部内容。默认配置已经能工作；你只需要打开 `.env` 填一个 LLM API Key：
 
 ```bash
-export XIAOMI_API_KEY="your-token-plan-key" # LLM 摘要/打分（必需；当前默认使用小米 MiMo）
-export XIAOMI_BASE_URL="https://token-plan-cn.xiaomimimo.com/v1"  # 可选，需与订阅页区域一致
-export GITHUB_TOKEN="your-token"            # GitHub Stars 导入（可选）
-export ZOTERO_API_KEY="your-key"            # Zotero tag 回写（可选）
-export FEISHU_APP_ID="your-app-id"          # 飞书推送（可选）
-export FEISHU_APP_SECRET="your-secret"      # 飞书推送（可选）
-export FEISHU_CHAT_ID="your-chat-id"        # 主动推送目标会话（daily/weekend 必需）
+XIAOMI_API_KEY=你的_key
+XIAOMI_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 ```
 
-### 4. 初始化
+没有 LLM Key 也能采集部分数据，但不会有高质量摘要和打分。
+
+### 3. 初始化数据库
 
 ```bash
 uv run passive-agent init-db
 ```
 
-### 5. 运行每日 pipeline
+### 4. 跑一次每日推荐
 
 ```bash
 uv run passive-agent daily
 ```
 
-## CLI 命令
+### 5. 查看结果
 
-| 命令 | 说明 |
-|------|------|
-| `daily` | 运行每日采集-处理-推送流水线 |
-| `status` | 查看系统状态（各阶段条目数） |
-| `list --stage recommended` | 列出指定阶段的条目 |
-| `action <id> --type card` | 对条目执行操作 |
-| `init-stars [--refresh]` | 导入/刷新 GitHub Stars |
-| `list-stars [--topic X] [--language Y] [--sort stars]` | 查看已导入的 Stars |
-| `export-stars [--output path]` | 导出 Stars 为 Markdown |
-| `weekly-report` | 生成本周周报 |
-| `weekend-push` | 推送周末阅读队列 |
-| `feishu-push [--stage recommended]` | 手动推送当前条目到飞书，用于验证配置 |
-| `zotero-writeback [--execute]` | Zotero tag 回写（默认 dry-run） |
-| `serve` | 启动飞书 Bot 长连接服务 |
-| `init-db` | 初始化数据库 |
+```bash
+uv run passive-agent status
+uv run passive-agent dashboard
+uv run passive-agent list --stage recommended
+```
 
-## 飞书配置与权限
+如果这些命令能看到推荐条目，说明本地流程已经跑通。
 
-`daily` 和 `weekend-push` 是一次性主动推送，必须设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID`。`serve` 是飞书长连接服务，用于接收消息和处理卡片按钮，需要单独常驻运行。
+## 你每天真正会用的命令
 
-### 飞书开放平台设置
+| 你想做什么 | 命令 |
+|---|---|
+| 跑一次完整推荐流程 | `uv run passive-agent daily` |
+| 看系统状态 | `uv run passive-agent status` |
+| 看终端看板 | `uv run passive-agent dashboard` |
+| 看推荐列表 | `uv run passive-agent list --stage recommended` |
+| 把某条变成面试卡 | `uv run passive-agent action <item_id> --type card` |
+| 忽略某条并记录负反馈 | `uv run passive-agent action <item_id> --type ignore` |
+| 加入周末深读 | `uv run passive-agent action <item_id> --type weekend` |
+| 生成本周周报 | `uv run passive-agent weekly-report` |
 
-1. 在飞书开放平台创建企业自建应用，并启用机器人能力。
-2. 在「凭证与基础信息」中复制 `App ID` / `App Secret`，分别写入 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。
-3. 在「权限管理」中至少开通以下权限，并发布新版本：
-   - 发送消息：`im:message:send_as_bot`（以应用的身份发消息）或 `im:message`（获取与发送单聊、群组消息）。
-   - 接收单聊消息：`im:message.p2p_msg` 或 `im:message.p2p_msg:readonly`。
-   - 如需在群聊里使用：`im:message.group_at_msg` 或 `im:message.group_at_msg:readonly`（接收群聊中 @ 机器人的消息）。
-4. 在「事件与回调」中使用长连接 / WebSocket 模式，并订阅：
-   - `im.message.receive_v1`（接收消息）：用于处理「推送」「暂停」「恢复」「详情 <id>」等文本命令。
-   - `card.action.trigger`（卡片回传交互）：用于处理卡片按钮。部分旧版控制台里名称可能显示为 `card.action.trigger_v1` /「消息卡片回传交互（旧）」。
-5. 修改权限或事件后，必须发布新版本，并在租户侧重新启用/升级应用；只在开发后台勾选但不发布，线上 Bot 不会生效。
+`<item_id>` 可以从 `list --stage recommended` 或 `dashboard` 里看到。
 
-### 获取和验证 `FEISHU_CHAT_ID`
+## 数据从哪里来
 
-先设置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`XIAOMI_API_KEY`，运行：
+默认配置里已经打开了常用来源。你可以先不改，跑通后再按需调整。
+
+| 来源 | 默认状态 | 说明 |
+|---|---:|---|
+| Zotero | 开启 | 读取本地 `~/Zotero/zotero.sqlite`，适合论文和长期资料库。 |
+| HuggingFace Daily Papers | 开启 | 拉取近期 HF Daily Papers。 |
+| Obsidian Inbox | 关闭 | 适合临时丢 URL，格式见下方。 |
+| GitHub Stars | 关闭 | 需要手动导入，适合整理已 star 的项目。 |
+
+### Obsidian Inbox 格式
+
+如果你启用了 Obsidian，在 inbox 文件里写：
+
+```markdown
+- [文章标题](https://example.com/article) #Agent #unread
+- 纯文本描述也可以
+- ✓ [已处理的条目](https://example.com/old)  # 会被跳过
+```
+
+### GitHub Stars
+
+GitHub Stars 不会每次 `daily` 自动全量拉取。需要时手动导入：
+
+```bash
+GITHUB_TOKEN=xxx uv run passive-agent init-stars
+uv run passive-agent list-stars --sort stars
+uv run passive-agent export-stars
+```
+
+## 配置怎么改：只看这 3 个地方
+
+大部分用户不用读完整 YAML。常改的只有这几个：
+
+### 1. 当前目标
+
+在 `config.yaml` 里改：
+
+```yaml
+goals:
+  current_focus: "Agent 算法岗面试准备"
+  priority_topics:
+    - Agent 架构与工程
+    - Tool Calling
+    - RAG 与评测
+```
+
+它会直接影响推荐排序。
+
+### 2. 数据源开关
+
+不用某个来源就关掉：
+
+```yaml
+sources:
+  zotero:
+    enabled: false
+  obsidian:
+    enabled: true
+    inbox_path: "~/ObsidianVault/00-Inbox/inbox.md"
+```
+
+### 3. 每天推几条
+
+```yaml
+scoring:
+  daily_limit: 3
+  weekend_limit: 5
+```
+
+完整配置参考：[docs/configuration.md](docs/configuration.md)。
+
+## 接入飞书（可选）
+
+本地能跑通以后，再接飞书。飞书分两种能力：
+
+| 能力 | 用途 | 需要什么 |
+|---|---|---|
+| 主动推送 | `daily` / `weekend-push` 把推荐卡片发到聊天里 | `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID` |
+| 长连接服务 | 接收“暂停 / 恢复 / 推送”等文本命令，处理卡片按钮 | `uv run passive-agent serve` 常驻运行 |
+
+### 1. 在 `.env` 里填飞书信息
+
+```bash
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+FEISHU_CHAT_ID=oc_xxx
+```
+
+### 2. 不知道 `FEISHU_CHAT_ID` 怎么拿？
+
+先只填 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`，启动长连接：
 
 ```bash
 uv run passive-agent serve
 ```
 
-然后在飞书里给机器人发一条消息。日志会输出：
+然后在飞书里给机器人发一条消息。日志里会出现：
 
 ```text
-Auto-detected chat_id: ...
+Auto-detected chat_id: oc_xxx
 ```
 
-把这个值写入 `FEISHU_CHAT_ID`。如果推送到群聊，必须把机器人加入同一个群，并确认机器人在群里有发言权限；否则主动发送会失败，典型报错是：
+把这个值写回 `.env` 的 `FEISHU_CHAT_ID`。
 
-```text
-230002 - Bot/User can NOT be out of the chat
-```
-
-可先用以下命令验证飞书配置是否能发消息：
+### 3. 验证能否主动推送
 
 ```bash
 uv run passive-agent feishu-push --stage recommended --limit 5
 ```
 
-再点击卡片按钮，日志应出现 `Card action: ...`。如果能收到卡片但点击按钮没反应，优先检查是否已订阅并发布 `card.action.trigger` / `card.action.trigger_v1`。
+能收到卡片，说明主动推送已通。
 
-### 常见踩坑
+### 4. 验证按钮和文本命令
 
-- **只配了 App ID/Secret 不够**：发消息、收消息、卡片按钮分别依赖不同权限/事件订阅。
-- **改完权限/事件必须发布版本**：否则本地 `serve` 重启也不会收到新事件。
-- **`FEISHU_CHAT_ID` 必须来自目标会话**：从 A 会话自动识别出的 chat_id，不能拿去给 Bot 不在其中的 B 群主动推送。
-- **系统代理可能影响长连接重连**：如果 macOS/launchd 环境里有 `HTTP_PROXY` / `HTTPS_PROXY` 指向本机代理（如 `127.0.0.1:7897`），而代理短暂不可用，飞书 WebSocket 可能断线后重连失败。
-
-  典型现象：
-  1. `serve` 启动后能连上，但机器休眠/网络切换后长时间不自动恢复；
-  2. 日志里没有新的 `Received message ...`，但本地网络本身是通的；
-  3. 手动在当前 shell 运行 `uv run passive-agent serve` 正常，launchd 却反复断。
-
-  排查顺序：
-  1. 先查 launchd 实际环境：`launchctl print gui/$(id -u)/com.passive-agent.serve`；
-  2. 看 `data/reports/serve_stdout.log` / `serve_stderr.log` 是否有重连或代理相关报错；
-  3. 确认本机代理是否只对部分域名生效，或者代理进程重启/崩溃过。
-
-  建议在 `~/Library/LaunchAgents/com.passive-agent.serve.plist` 的 `EnvironmentVariables` 里显式加：
-
-  ```xml
-  <key>NO_PROXY</key>
-  <string>open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost</string>
-  <key>no_proxy</key>
-  <string>open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost</string>
-  ```
-
-  如果确实使用代理，也建议把 `HTTP_PROXY` / `HTTPS_PROXY` 写进同一个 plist，而不是只依赖 shell/zshrc；launchd 不会自动继承你的交互式 shell 配置。
-
-  快速验证：
-  1. `launchctl bootout gui/$(id -u)/com.passive-agent.serve || true`
-  2. `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.passive-agent.serve.plist`
-  3. 飞书发「状态」或「推送」，确认 `serve` 日志里出现 `Received message ...`。
-
-## 用户操作
-
-对推荐条目可执行 8 种操作：
-
-| 操作 | CLI type | 说明 |
-|------|----------|------|
-| 生成面试卡 | `card` | 生成 Q&A 结构的面试准备卡片 |
-| 生成技术笔记 | `note` | 生成结构化技术笔记 |
-| 标记已读 | `read` | 标记为已处理 |
-| 忽略 | `ignore` | 移除 + 记录负反馈 |
-| 少推类似 | `mute` | 降低该主题/来源权重 |
-| 加入周末 | `weekend` | 放入周末深度阅读队列 |
-| 关联笔记 | `link` | 搜索 Obsidian 中相关笔记 |
-
-示例：
+保持下面命令运行：
 
 ```bash
-uv run passive-agent action item_20260522_001 --type card
-uv run passive-agent action item_20260522_002 --type weekend
+uv run passive-agent serve
 ```
 
-## 数据源配置
+然后在飞书里：
 
-所有配置集中在项目根目录的 `config.yaml` 中，按 `runtime` / `llm` / `goals` / `sources` / `recommendations` / `display` / `feishu` / `scoring` 八个顶层 key 区分。详见 [docs/configuration.md](docs/configuration.md)。
+- 点卡片按钮，日志应出现 `Card action: ...`
+- 发送 `状态` / `推送` / `暂停` / `恢复`，日志应出现收到消息
+
+### 5. 飞书开放平台需要打开什么
+
+在飞书开放平台的企业自建应用里：
+
+1. 启用机器人能力。
+2. 权限管理里开通消息发送权限：`im:message:send_as_bot` 或 `im:message`。
+3. 如果要接收文本命令，订阅事件：`im.message.receive_v1`。
+4. 如果要处理卡片按钮，订阅事件：`card.action.trigger`（旧控制台可能叫 `card.action.trigger_v1`）。
+5. 每次改权限或事件后，都要发布新版本，并在租户侧升级/启用。
+
+## 自动定时运行（可选）
+
+本地和飞书都验证通过后，再安装 macOS LaunchAgent：
+
+```bash
+scripts/install_launchd.sh
+```
+
+这个脚本会安装 3 个任务：
+
+| 服务 | 做什么 |
+|---|---|
+| `com.passive-agent.daily` | 每天 21:00 跑一次 `daily` |
+| `com.passive-agent.weekend` | 每周六 10:00 推送周末阅读队列 |
+| `com.passive-agent.serve` | 常驻飞书长连接服务 |
+
+查看服务：
+
+```bash
+launchctl list | grep passive-agent
+```
+
+日志通常在：
+
+```text
+data/reports/*stdout.log
+data/reports/*stderr.log
+```
+
+## 踩坑速查
+
+### 1. `uv run passive-agent daily` 没有飞书推送
+
+先确认 `.env` 里有：
+
+```bash
+FEISHU_APP_ID=...
+FEISHU_APP_SECRET=...
+FEISHU_CHAT_ID=...
+```
+
+然后手动验证：
+
+```bash
+uv run passive-agent feishu-push --stage recommended --limit 5
+```
+
+如果手动推送也失败，优先排查飞书权限和 `FEISHU_CHAT_ID`。
+
+### 2. 报错 `230002 - Bot/User can NOT be out of the chat`
+
+含义：机器人不在目标会话里，或者 `FEISHU_CHAT_ID` 不是这个会话的。
+
+处理：把机器人拉进目标群，重新用 `serve` 自动识别该群的 `chat_id`，再写回 `.env`。
+
+### 3. 能收到卡片，但点击按钮没反应
+
+通常是没有订阅或没有发布卡片事件。
+
+检查飞书开放平台：
+
+- 是否订阅 `card.action.trigger` / `card.action.trigger_v1`
+- 是否发布新版本
+- 租户侧是否升级/启用新版应用
+
+### 4. 能主动推送，但发“状态 / 推送”没反应
+
+通常是文本消息事件没通。
+
+检查：
+
+- 是否订阅 `im.message.receive_v1`
+- 是否给了接收单聊/群聊消息权限
+- `uv run passive-agent serve` 是否正在运行
+
+### 5. launchd 后台跑不起来，但手动命令正常
+
+常见原因是项目放在 `Documents` / `Desktop` / `Downloads` 这类 macOS 隐私保护目录下。建议放到：
+
+```text
+~/Code/Agents/PassiveAgent
+```
+
+如果已经放错位置，移动后重新执行：
+
+```bash
+uv sync
+scripts/install_launchd.sh
+```
+
+### 6. launchd 里飞书长连接偶发断开
+
+如果系统环境里有代理，例如 `HTTP_PROXY=http://127.0.0.1:7897`，飞书 WebSocket 重连可能受影响。
+
+建议给 launchd 环境加 `NO_PROXY`：
+
+```text
+open.feishu.cn,msg-frontier.feishu.cn,.feishu.cn,.larksuite.com,127.0.0.1,localhost
+```
+
+如果你用 `scripts/install_launchd.sh`，它会把 `.env` 中的非空值写入 plist；更复杂的代理设置可直接检查 `~/Library/LaunchAgents/com.passive-agent.serve.plist`。
+
+### 7. GitHub Stars 为空
+
+GitHub Stars 需要手动导入，并且需要 `GITHUB_TOKEN`：
+
+```bash
+GITHUB_TOKEN=xxx uv run passive-agent init-stars
+```
+
+### 8. 不想用 Zotero / Obsidian
+
+在 `config.yaml` 里关掉对应来源即可：
 
 ```yaml
-# config.yaml 结构概览
-runtime:
-  db_path: "data/workbench.db"
-  reports_dir: "data/reports"
-  prompts_dir: "prompts"
-
-llm:
-  provider: "openai_compatible"
-  api_key_env: "XIAOMI_API_KEY"
-  base_url: "https://token-plan-cn.xiaomimimo.com/v1"
-  model: "mimo-v2.5-pro"
-  temperature: 0.3
-  max_concurrency: 5
-  max_retries: 3
-
-goals:
-  current_focus: "Agent 算法岗面试准备"
-  priority_topics: [...]
-  output_preference: "interview_card"
-
 sources:
   zotero:
-    enabled: true
-    db_path: "~/Zotero/zotero.sqlite"
-    sqlite_timeout_seconds: 30.0
-    ...
+    enabled: false
   obsidian:
-    enabled: true
-    inbox_path: "~/ObsidianVault/00-Inbox/inbox.md"
-    ...
-  github_stars:
-    enabled: true
-    max_pages: 10
-    per_page: 100
-    ...
-  hf_daily:
-    enabled: true
-    max_papers: 30
-    lookback_days: 30
-    ...
-
-recommendations:
-  stale_after_days: 7
-  related_zotero_limit: 3
-  related_stars_limit: 3
-
-display:
-  dashboard_limit: 10
-  manual_push_limit: 5
-
-feishu:
-  async_timeout_seconds: 60.0
-
-scoring:
-  weights: { goal_relevance: 0.30, ... }
-  daily_limit: 3
-  negative_feedback: { topic_threshold: 3, topic_window: 10, ... }
+    enabled: false
 ```
-
-GitHub Stars 用法：
-
-```bash
-GITHUB_TOKEN=xxx uv run passive-agent init-stars            # 首次导入
-GITHUB_TOKEN=xxx uv run passive-agent init-stars --refresh  # 刷新元数据
-uv run passive-agent list-stars --topic Agent --sort stars  # 查看
-uv run passive-agent export-stars                           # 导出 Markdown
-```
-
-## 评分机制
-
-系统通过 6 个维度对条目打分，只有高分条目才会被推荐：
-
-| 维度 | 权重 | 说明 |
-|------|------|------|
-| 目标相关性 | 30% | 是否与当前 focus 强相关 |
-| 新颖性 | 20% | 是否为已有知识中没有的 |
-| 可操作性 | 20% | 能否转化为代码/卡片/回答 |
-| 难度适配 | 10% | 是否适合碎片时间消化 |
-| 来源质量 | 10% | 官方文档/源码 > 泛泛文章 |
-| 时效性 | 10% | 近期技术更新优先 |
-
-负反馈机制：连续忽略同一主题/来源会自动降权，长期不触发则逐步恢复。
 
 ## 项目结构
 
-```
-passive-agent-workbench/
-├── config.yaml              # 统一配置文件（gitignored，提供 .example）
-├── prompts/                 # LLM prompt 模板 (Jinja2)
-├── docs/                    # 文档
+```text
+PassiveAgent/
+├── config.yaml.example      # 配置模板
+├── .env.example             # 环境变量模板，不提交真实密钥
+├── prompts/                 # LLM prompt 模板
+├── docs/                    # 详细文档
+├── scripts/                 # launchd 安装脚本和 plist 模板
 ├── src/passive_agent/
 │   ├── main.py              # CLI 入口
 │   ├── pipeline.py          # 每日处理流水线
 │   ├── collectors/          # 数据采集器
-│   ├── processors/          # 去重/评分/摘要/排序
+│   ├── processors/          # 去重 / 摘要 / 打分 / 排序
 │   ├── actions/             # 用户操作处理
-│   ├── integrations/        # 外部集成 (DeepSeek, Zotero API, Obsidian)
 │   ├── feishu/              # 飞书 Bot
-│   ├── storage/             # 数据库 + 数据模型
-│   └── utils/               # 配置/日志
-├── data/                    # 运行时数据（gitignored）
-│   ├── workbench.db         # SQLite 数据库
-│   └── reports/             # 周报/导出
+│   └── storage/             # SQLite 数据库和模型
 └── tests/
 ```
 
-## 自动化部署 (macOS launchd)
-
-建议把项目放在 `~/Code`、`~/Developer` 等普通目录下再安装 launchd 服务。macOS 的
-Documents、Desktop、Downloads 受隐私权限保护，LaunchAgent 后台进程可能无法读取
-项目内的 `.venv`，表现为 `PermissionError: [Errno 1] Operation not permitted:
-.../.venv/pyvenv.cfg`。`scripts/install_launchd.sh` 会拦截这些路径并给出迁移命令；
-如已明确授予所需权限，可用 `PASSIVE_AGENT_ALLOW_TCC_PROTECTED_DIR=1
-scripts/install_launchd.sh` 覆盖。
-
-创建 `~/Library/LaunchAgents/com.passive-agent.daily.plist`：
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.passive-agent.daily</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/PassiveAgent/.venv/bin/python</string>
-        <string>-m</string>
-        <string>passive_agent.main</string>
-        <string>daily</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>/path/to/PassiveAgent</string>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>22</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>XIAOMI_API_KEY</key>
-        <string>your-token-plan-key</string>
-        <key>XIAOMI_BASE_URL</key>
-        <string>https://token-plan-cn.xiaomimimo.com/v1</string>
-        <key>FEISHU_APP_ID</key>
-        <string>your-app-id</string>
-        <key>FEISHU_APP_SECRET</key>
-        <string>your-secret</string>
-        <key>FEISHU_CHAT_ID</key>
-        <string>your-chat-id</string>
-    </dict>
-</dict>
-</plist>
-```
-
-加载：
+## 开发
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.passive-agent.daily.plist
+uv sync --all-extras
+uv run pytest tests/ -v
 ```
 
-如果使用 `scripts/install_launchd.sh` 安装 plist，注意 launchd 不会自动继承当前终端里的 `export`。可用 `launchctl setenv FEISHU_CHAT_ID "..."` 等命令写入用户级环境，或在安装后的 plist 中配置 `EnvironmentVariables`。
-
-## 技术栈
-
-- Python 3.11+
-- SQLite (WAL mode)
-- OpenAI-compatible LLM API（当前默认小米 MiMo，用于摘要/评分/分类）
-- Zotero Web API (tag 回写)
-- 飞书开放平台 (推送/交互)
-- Click (CLI)
-- Jinja2 (prompt 模板)
+技术栈：Python 3.11+、SQLite、Click、Jinja2、OpenAI-compatible LLM API、飞书开放平台。
 
 ## License
 
