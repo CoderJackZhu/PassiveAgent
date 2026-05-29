@@ -7,7 +7,7 @@ from passive_agent.processors.ranker import Ranker
 from passive_agent.storage.database import Database
 
 if TYPE_CHECKING:
-    from passive_agent.integrations.deepseek import DeepSeekClient
+    from passive_agent.integrations.llm_client import LLMClient
     from passive_agent.utils.config import AppConfig
 
 
@@ -29,7 +29,7 @@ class CommandHandler:
         self,
         db: Database,
         config: AppConfig | None = None,
-        llm: DeepSeekClient | None = None,
+        llm: LLMClient | None = None,
         feishu_bot: object | None = None,
     ):
         self.db = db

@@ -18,7 +18,7 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
 from passive_agent.feishu.callbacks import CallbackHandler
 from passive_agent.feishu.cards import CardBuilder
 from passive_agent.feishu.commands import CommandHandler
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.storage.database import Database
 from passive_agent.storage.models import EnrichedItem
 from passive_agent.utils.config import AppConfig
@@ -45,7 +45,7 @@ def _run_async(coro, timeout_seconds: float = 60.0):
 class FeishuBot:
     """飞书 Bot - 长连接模式"""
 
-    def __init__(self, config: AppConfig, db: Database, llm: DeepSeekClient | None = None):
+    def __init__(self, config: AppConfig, db: Database, llm: LLMClient | None = None):
         self.config = config
         self.db = db
         self.llm = llm

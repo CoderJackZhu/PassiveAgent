@@ -27,7 +27,7 @@ uv run pytest tests/ -v
 - `collectors/` — 数据源采集器，每个实现 `Collector` 基类的 `is_available()` + `collect()` 方法
 - `processors/` — 处理链：Normalizer → Deduplicator → Scorer → Summarizer → Ranker
 - `actions/` — 用户操作处理器，每个实现 `BaseAction.execute(item_id)` 方法
-- `integrations/` — 外部服务集成（DeepSeek LLM, Obsidian 写入, Zotero 回写）
+- `integrations/` — 外部服务集成（LLM Client, Obsidian 写入, Zotero 回写）
 - `feishu/` — 飞书 Bot 长连接 + 回调处理
 
 ### 数据流

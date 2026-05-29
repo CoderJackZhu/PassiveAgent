@@ -9,7 +9,7 @@ from pathlib import Path
 from passive_agent.collectors.hf_daily import HFDailyPapersCollector
 from passive_agent.collectors.obsidian import ObsidianCollector
 from passive_agent.collectors.zotero import ZoteroCollector
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.processors.deduplicator import Deduplicator
 from passive_agent.processors.feedback_engine import FeedbackEngine
 from passive_agent.processors.normalizer import Normalizer
@@ -34,7 +34,7 @@ class PipelineResult:
 
 
 class DailyPipeline:
-    def __init__(self, config: AppConfig, db: Database, llm: DeepSeekClient | None = None,
+    def __init__(self, config: AppConfig, db: Database, llm: LLMClient | None = None,
                  feishu_bot=None):
         self.config = config
         self.db = db

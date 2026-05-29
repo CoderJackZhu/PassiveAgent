@@ -235,8 +235,6 @@ scoring:
 | `FEISHU_APP_SECRET` | 否 | 飞书 Bot 推送 |
 | `FEISHU_CHAT_ID` | 主动推送时必需 | `daily` / `weekend-push` 的目标会话 ID |
 
-建议在 `.env` 中配置（已被 gitignore）。如果通过 launchd 定时运行，`scripts/install_launchd.sh` 会把 `.env` 中非空的环境变量写入 plist 的 `EnvironmentVariables`。
+建议在 `.env` 中配置（已被 gitignore）。如果通过 launchd 定时运行，参考 [定时任务文档](scheduled-tasks.md)。
 
-**TCC 权限注意**：建议把项目放在 `~/Code`、`~/Developer` 等普通目录。macOS 的 Documents、Desktop、Downloads 受隐私权限保护，LaunchAgent 后台进程可能无法读取 `.venv`。`scripts/install_launchd.sh` 会阻止从这些目录安装并打印迁移命令。
-
-获取 `FEISHU_CHAT_ID`：运行 `uv run passive-agent serve`，在飞书中给机器人发一条消息，终端日志会输出 `Auto-detected chat_id: ...`。
+获取 `FEISHU_CHAT_ID`：运行 `uv run passive-agent serve`，在飞书中给机器人发一条消息，终端日志会输出 `Auto-detected chat_id: ...`。详见 [飞书接入](feishu.md)。

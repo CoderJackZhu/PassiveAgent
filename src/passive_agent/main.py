@@ -57,8 +57,8 @@ def _build_llm(config, *, required: bool = False):
         log.warning(f"{message}, running without LLM (collect only)")
         return None
 
-    from passive_agent.integrations.deepseek import DeepSeekClient
-    return DeepSeekClient(
+    from passive_agent.integrations.llm_client import LLMClient
+    return LLMClient(
         api_key=api_key,
         api_key_env=config.llm.api_key_env,
         base_url=config.llm.base_url,

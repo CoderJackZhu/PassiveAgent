@@ -4,14 +4,14 @@ import asyncio
 
 from jinja2 import Environment, FileSystemLoader
 
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.storage.models import Item
 from passive_agent.utils.config import GoalsConfig
 from passive_agent.utils.logger import log
 
 
 class Summarizer:
-    def __init__(self, llm: DeepSeekClient, goals: GoalsConfig, prompts_dir: str = "prompts"):
+    def __init__(self, llm: LLMClient, goals: GoalsConfig, prompts_dir: str = "prompts"):
         self.llm = llm
         self.goals = goals
         self.jinja = Environment(loader=FileSystemLoader(prompts_dir))

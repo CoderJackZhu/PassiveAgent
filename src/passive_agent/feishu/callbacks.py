@@ -7,7 +7,7 @@ from passive_agent.actions.interview_card import InterviewCardAction
 from passive_agent.actions.mark_read import MarkReadAction
 from passive_agent.actions.tech_note import TechNoteAction
 from passive_agent.feishu.cards import CardBuilder
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.integrations.obsidian_writer import ObsidianWriter
 from passive_agent.storage.database import Database
 from passive_agent.utils.config import AppConfig
@@ -17,7 +17,7 @@ from passive_agent.utils.logger import log
 class CallbackHandler:
     """处理飞书卡片按钮回调"""
 
-    def __init__(self, config: AppConfig, db: Database, llm: DeepSeekClient | None):
+    def __init__(self, config: AppConfig, db: Database, llm: LLMClient | None):
         self.config = config
         self.db = db
         self.llm = llm

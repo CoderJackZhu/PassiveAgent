@@ -4,7 +4,7 @@ import asyncio
 
 from jinja2 import Environment, FileSystemLoader
 
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.storage.database import Database
 from passive_agent.storage.models import Item, Score
 from passive_agent.utils.config import GoalsConfig, ScoringConfig
@@ -14,7 +14,7 @@ COLLECTION_BOOST = 1.15
 
 
 class Scorer:
-    def __init__(self, llm: DeepSeekClient, goals: GoalsConfig, scoring: ScoringConfig,
+    def __init__(self, llm: LLMClient, goals: GoalsConfig, scoring: ScoringConfig,
                  db: Database, prompts_dir: str = "prompts",
                  high_priority_collections: list[str] | None = None):
         self.llm = llm

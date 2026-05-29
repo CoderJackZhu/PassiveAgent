@@ -5,7 +5,7 @@ import asyncio
 import httpx
 
 from passive_agent.collectors.base import Collector
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.storage.database import Database
 from passive_agent.storage.models import RawItem
 from passive_agent.utils.logger import log
@@ -38,7 +38,7 @@ class GitHubStarsInitializer:
         self,
         token: str,
         db: Database,
-        llm: DeepSeekClient | None,
+        llm: LLMClient | None,
         max_pages: int = 10,
         per_page: int = 100,
         classification_batch_size: int = 10,

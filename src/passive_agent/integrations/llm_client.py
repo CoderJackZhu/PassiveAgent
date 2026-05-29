@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 from passive_agent.utils.logger import log
 
 
-class DeepSeekClient:
+class LLMClient:
     def __init__(
         self,
         api_key: str | None = None,
@@ -53,12 +53,11 @@ class DeepSeekClient:
                     response = await self.client.chat.completions.create(**kwargs)
                     return response.choices[0].message.content or ""
                 except Exception as e:
-                    # 认证错误不重试
                     if "401" in str(e) or "authentication" in str(e).lower():
                         raise
                     if attempt < self.max_retries - 1:
                         wait = self.retry_backoff_base_seconds * (2 ** attempt)
-                        log.warning(f"DeepSeek API error (retry in {wait:g}s): {e}")
+                        log.warning(f"LLM API error (retry in {wait:g}s): {e}")
                         await asyncio.sleep(wait)
                     else:
                         raise

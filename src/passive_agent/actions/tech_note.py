@@ -5,7 +5,7 @@ from datetime import date
 from jinja2 import Environment, FileSystemLoader
 
 from passive_agent.actions.base import ActionResult
-from passive_agent.integrations.deepseek import DeepSeekClient
+from passive_agent.integrations.llm_client import LLMClient
 from passive_agent.integrations.obsidian_writer import ObsidianWriter
 from passive_agent.storage.database import Database
 from passive_agent.utils.config import GoalsConfig
@@ -13,7 +13,7 @@ from passive_agent.utils.logger import log
 
 
 class TechNoteAction:
-    def __init__(self, db: Database, llm: DeepSeekClient, writer: ObsidianWriter,
+    def __init__(self, db: Database, llm: LLMClient, writer: ObsidianWriter,
                  goals: GoalsConfig, prompts_dir: str = "prompts"):
         self.db = db
         self.llm = llm
