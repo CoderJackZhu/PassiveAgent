@@ -50,7 +50,6 @@ class CardBuilder:
                 "tag": "action",
                 "actions": [
                     _button("展开", "primary", {"action": "expand", "item_id": item.id}),
-                    _button("面试卡", "primary", {"action": "card", "item_id": item.id}),
                     _button("周末", "default", {"action": "weekend", "item_id": item.id}),
                     _button("忽略", "danger", {"action": "ignore", "item_id": item.id}),
                 ],
@@ -180,7 +179,6 @@ class CardBuilder:
                 "tag": "action",
                 "actions": [
                     _button("展开", "primary", {"action": "expand", "item_id": item.id}),
-                    _button("面试卡", "primary", {"action": "card", "item_id": item.id}),
                     _button("忽略", "danger", {"action": "ignore", "item_id": item.id}),
                 ],
             })
