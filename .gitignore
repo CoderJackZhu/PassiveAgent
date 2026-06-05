@@ -23,3 +23,4 @@ data/reports/
 # User-specific config (use config.yaml.example as template)
 config.yaml
 .DS_Store
+data/logs/
