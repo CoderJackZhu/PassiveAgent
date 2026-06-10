@@ -19,9 +19,9 @@
     <key>WorkingDirectory</key>
     <string>__PROJECT_DIR__</string>
     <key>StandardOutPath</key>
-    <string>__PROJECT_DIR__/data/reports/daily_stdout.log</string>
+    <string>__PROJECT_DIR__/data/logs/daily_stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>__PROJECT_DIR__/data/reports/daily_stderr.log</string>
+    <string>__PROJECT_DIR__/data/logs/daily_stderr.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

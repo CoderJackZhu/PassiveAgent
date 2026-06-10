@@ -60,6 +60,48 @@ class FakeBot:
         return self.result
 
 
+def test_feishu_bot_records_pushed_events_only_after_success(db):
+    from passive_agent.feishu.bot import FeishuBot
+
+    bot = object.__new__(FeishuBot)
+    bot.db = db
+    bot.chat_id = "chat"
+    send_results = [True, False]
+    bot._send_card = lambda _chat_id, _card: send_results.pop(0)
+    item = Item(id="daily-push", source="zotero", title="Daily Push")
+
+    assert bot.send_daily_card([EnrichedItem(item=item)], surface="manual") is True
+    assert bot.send_daily_card([EnrichedItem(item=item)], surface="manual") is False
+
+    events = db.get_item_events_between(
+        datetime.now() - timedelta(minutes=1),
+        datetime.now() + timedelta(minutes=1),
+    )
+    assert [(event["item_id"], event["event_type"], event["surface"]) for event in events] == [
+        ("daily-push", "pushed", "manual")
+    ]
+
+
+def test_feishu_bot_records_weekend_pushed_events(db):
+    from passive_agent.feishu.bot import FeishuBot
+
+    bot = object.__new__(FeishuBot)
+    bot.db = db
+    bot.chat_id = "chat"
+    bot._send_card = lambda _chat_id, _card: True
+    item = Item(id="weekend-push", source="zotero", title="Weekend Push")
+
+    assert bot.send_weekend_card([EnrichedItem(item=item)]) is True
+
+    events = db.get_item_events_between(
+        datetime.now() - timedelta(minutes=1),
+        datetime.now() + timedelta(minutes=1),
+    )
+    assert [(event["item_id"], event["event_type"], event["surface"]) for event in events] == [
+        ("weekend-push", "pushed", "weekend")
+    ]
+
+
 def test_pipeline_initializes_collectors_with_configured_knobs(config_dir, db):
     config = load_config(config_dir)
     config.sources.zotero.enabled = True
@@ -127,8 +169,14 @@ def test_feishu_push_bypasses_persisted_pause_for_manual_validation(config_dir, 
     calls = []
 
     class RecordingBot:
-        def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
-            calls.append((len(items), respect_pause))
+        def send_daily_card(
+            self,
+            items: list[EnrichedItem],
+            *,
+            respect_pause: bool = True,
+            surface: str = "daily",
+        ) -> bool:
+            calls.append((len(items), respect_pause, surface))
             return True
 
     monkeypatch.setattr(main_module, "load_config", lambda _config_dir: config)
@@ -140,7 +188,7 @@ def test_feishu_push_bypasses_persisted_pause_for_manual_validation(config_dir, 
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == [(1, False)]
+    assert calls == [(1, False, "manual")]
     assert db.is_paused() is True
 
 

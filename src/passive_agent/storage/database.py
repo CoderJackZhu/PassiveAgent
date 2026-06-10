@@ -8,7 +8,7 @@ from pathlib import Path
 from passive_agent.storage.models import FeedbackRecord, Item, Score
 from passive_agent.utils.logger import log
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS items (
@@ -89,6 +89,23 @@ CREATE TABLE IF NOT EXISTS app_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS item_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    surface TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS weekly_reports (
+    week_start TEXT PRIMARY KEY,
+    report_path TEXT NOT NULL,
+    generated_at TEXT NOT NULL,
+    pushed_at TEXT,
+    summary TEXT
+);
+
 CREATE TABLE IF NOT EXISTS zotero_write_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_key TEXT NOT NULL,
@@ -105,6 +122,8 @@ CREATE INDEX IF NOT EXISTS idx_feedback_topic_time ON feedback(topic, created_at
 CREATE INDEX IF NOT EXISTS idx_feedback_source_time ON feedback(source, created_at);
 CREATE INDEX IF NOT EXISTS idx_scores_item ON scores(item_id);
 CREATE INDEX IF NOT EXISTS idx_daily_log_date ON daily_log(date);
+CREATE INDEX IF NOT EXISTS idx_item_events_time ON item_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_item_events_item_type_time ON item_events(item_id, event_type, created_at);
 """
 
 
@@ -143,6 +162,30 @@ class Database:
                     self.conn.execute("ALTER TABLE daily_log ADD COLUMN status TEXT NOT NULL DEFAULT 'success'")
                 except sqlite3.OperationalError:
                     pass
+            if current_version < 5:
+                self.conn.executescript("""
+                CREATE TABLE IF NOT EXISTS item_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    surface TEXT,
+                    metadata TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS weekly_reports (
+                    week_start TEXT PRIMARY KEY,
+                    report_path TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    pushed_at TEXT,
+                    summary TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_item_events_time ON item_events(created_at);
+                CREATE INDEX IF NOT EXISTS idx_item_events_item_type_time
+                    ON item_events(item_id, event_type, created_at);
+                """)
+                self._backfill_legacy_ignore_events()
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             self.conn.commit()
             log.info(f"Database initialized (version {SCHEMA_VERSION})")
@@ -317,6 +360,70 @@ class Database:
             for r in rows
         ]
 
+    # --- Item Events ---
+
+    def _backfill_legacy_ignore_events(self):
+        self.conn.execute(
+            """INSERT INTO item_events (item_id, event_type, surface, metadata, created_at)
+               SELECT f.item_id,
+                      'ignore',
+                      'legacy_feedback',
+                      '{"feedback_id":' || f.id || '}',
+                      f.created_at
+               FROM feedback AS f
+               WHERE f.action = 'ignore'
+                 AND NOT EXISTS (
+                    SELECT 1
+                    FROM item_events AS e
+                    WHERE e.item_id = f.item_id
+                      AND e.event_type = 'ignore'
+                      AND e.created_at = f.created_at
+                 )"""
+        )
+
+    def record_item_event(
+        self,
+        item_id: str,
+        event_type: str,
+        *,
+        surface: str | None = None,
+        metadata: dict | None = None,
+        created_at: datetime | None = None,
+    ):
+        created = created_at or datetime.now()
+        self.conn.execute(
+            """INSERT INTO item_events (item_id, event_type, surface, metadata, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                item_id,
+                event_type,
+                surface,
+                json.dumps(metadata or {}, ensure_ascii=False),
+                created.isoformat(),
+            ),
+        )
+        self.conn.commit()
+
+    def get_item_events_between(self, start: datetime, end: datetime) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT id, item_id, event_type, surface, metadata, created_at
+               FROM item_events
+               WHERE created_at >= ? AND created_at < ?
+               ORDER BY created_at ASC, id ASC""",
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+        return [self._parse_item_event_row(row) for row in rows]
+
+    @staticmethod
+    def _parse_item_event_row(row: sqlite3.Row) -> dict:
+        data = dict(row)
+        try:
+            data["metadata"] = json.loads(data.get("metadata") or "{}")
+        except json.JSONDecodeError:
+            data["metadata"] = {}
+        data["created_at"] = datetime.fromisoformat(data["created_at"])
+        return data
+
     # --- Weights ---
 
     def get_topic_weight(self, topic: str) -> float:
@@ -431,6 +538,71 @@ class Database:
                 data["errors"] = [data.get("errors")]
             logs.append(data)
         return logs
+
+    # --- Weekly Reports ---
+
+    def save_weekly_report(
+        self,
+        *,
+        week_start: date,
+        report_path: str,
+        generated_at: datetime | None = None,
+        summary: dict | None = None,
+    ):
+        generated = generated_at or datetime.now()
+        self.conn.execute(
+            """INSERT INTO weekly_reports (week_start, report_path, generated_at, summary)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(week_start) DO UPDATE SET
+                   report_path = excluded.report_path,
+                   generated_at = excluded.generated_at,
+                   summary = excluded.summary""",
+            (
+                week_start.isoformat(),
+                report_path,
+                generated.isoformat(),
+                json.dumps(summary or {}, ensure_ascii=False),
+            ),
+        )
+        self.conn.commit()
+
+    def get_weekly_report(self, week_start: date) -> dict | None:
+        row = self.conn.execute(
+            """SELECT week_start, report_path, generated_at, pushed_at, summary
+               FROM weekly_reports
+               WHERE week_start = ?""",
+            (week_start.isoformat(),),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._parse_weekly_report_row(row)
+
+    def mark_weekly_report_pushed(
+        self,
+        week_start: date,
+        *,
+        pushed_at: datetime | None = None,
+    ):
+        pushed = pushed_at or datetime.now()
+        self.conn.execute(
+            "UPDATE weekly_reports SET pushed_at = ? WHERE week_start = ?",
+            (pushed.isoformat(), week_start.isoformat()),
+        )
+        self.conn.commit()
+
+    @staticmethod
+    def _parse_weekly_report_row(row: sqlite3.Row) -> dict:
+        data = dict(row)
+        data["week_start"] = date.fromisoformat(data["week_start"])
+        data["generated_at"] = datetime.fromisoformat(data["generated_at"])
+        data["pushed_at"] = (
+            datetime.fromisoformat(data["pushed_at"]) if data.get("pushed_at") else None
+        )
+        try:
+            data["summary"] = json.loads(data.get("summary") or "{}")
+        except json.JSONDecodeError:
+            data["summary"] = {}
+        return data
 
     # --- Zotero Write Queue ---
 

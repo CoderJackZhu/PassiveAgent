@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -61,3 +62,24 @@ def test_open_daily_generates_valid_html_file(config_dir, db, tmp_path, monkeypa
     assert "<h1>今日推荐</h1>" in html
     assert "</html>" in html
     assert opened_urls == [html_path.resolve().as_uri()]
+
+
+def test_action_command_records_read_event(config_dir, db, monkeypatch):
+    config = load_config(config_dir)
+    config.db_path = str(db.db_path)
+    db.save_item(Item(id="cli-read", source="zotero", title="CLI Read", stage="recommended"))
+    monkeypatch.setattr(main_module, "load_config", lambda _config_dir: config)
+
+    result = CliRunner().invoke(
+        main_module.cli,
+        ["--config-dir", config_dir, "action", "cli-read", "--type", "read"],
+    )
+
+    assert result.exit_code == 0, result.output
+    events = db.get_item_events_between(
+        datetime.now() - timedelta(minutes=1),
+        datetime.now() + timedelta(minutes=1),
+    )
+    assert [(event["item_id"], event["event_type"]) for event in events] == [
+        ("cli-read", "read")
+    ]

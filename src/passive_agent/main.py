@@ -92,6 +92,16 @@ STAGE_ROWS = (
     ("Ignored", "ignored", "red"),
 )
 
+CLI_ACTION_EVENT_TYPES = {
+    "card": "generate_card",
+    "note": "generate_note",
+    "ignore": "ignore",
+    "read": "read",
+    "link": "link",
+    "mute": "mute",
+    "weekend": "weekend",
+}
+
 
 def _latest_collection_date(db: Database) -> str:
     row = db.conn.execute("SELECT date FROM daily_log ORDER BY date DESC LIMIT 1").fetchone()
@@ -429,18 +439,46 @@ def init_db(ctx):
 
 
 @cli.command("weekly-report")
+@click.option("--push", is_flag=True, default=False, help="推送周报到飞书")
+@click.option("--force", is_flag=True, default=False, help="即使本周已推送也再次推送")
 @click.pass_context
-def weekly_report(ctx):
+def weekly_report(ctx, push: bool, force: bool):
     """生成本周周报"""
-    from passive_agent.pipeline import generate_weekly_report
+    from passive_agent.reports.weekly import build_weekly_report
 
     config = load_config(ctx.obj["config_dir"])
     db = Database(config.db_path)
     db.initialize()
 
     try:
-        path = generate_weekly_report(config, db)
-        click.echo(f"Weekly report: {path}")
+        report = build_weekly_report(config, db)
+        click.echo(f"Weekly report: {report.report_path}")
+
+        if not push:
+            return
+
+        existing = db.get_weekly_report(report.week_start)
+        if existing and existing.get("pushed_at") and not force:
+            click.echo(f"Weekly report already pushed for {report.week_start.isoformat()}; use --force to push again.")
+            return
+
+        feishu_bot = _init_feishu_bot(config, db, require_chat_id=True)
+        if not feishu_bot:
+            click.echo("Error: Feishu Bot not configured", err=True)
+            raise SystemExit(1)
+
+        if not feishu_bot.send_weekly_report_card(report.to_card_payload()):
+            click.echo("Error: Feishu weekly report push failed", err=True)
+            raise SystemExit(1)
+
+        db.mark_weekly_report_pushed(report.week_start)
+        db.record_item_event(
+            f"weekly_report:{report.week_start.isoformat()}",
+            "weekly_report_pushed",
+            surface="feishu",
+            metadata={"report_path": report.report_path},
+        )
+        click.echo("Weekly report pushed to Feishu.")
     finally:
         db.close()
 
@@ -667,6 +705,7 @@ def action(ctx, item_id: str, action_type: str):
                 raise SystemExit(1)
             db.conn.execute("UPDATE items SET is_weekend = 1 WHERE id = ?", (item_id,))
             db.conn.commit()
+            db.record_item_event(item_id, "weekend", surface="cli")
             click.echo(f"✓ 已加入周末队列: {item.title}")
             return
         else:  # read
@@ -676,6 +715,9 @@ def action(ctx, item_id: str, action_type: str):
         result: ActionResult = asyncio.run(handler.execute(item_id))
 
         if result.success:
+            event_type = CLI_ACTION_EVENT_TYPES.get(action_type)
+            if event_type:
+                db.record_item_event(item_id, event_type, surface="cli")
             click.echo(f"✓ {result.message}")
             if result.output_path:
                 click.echo(f"  → {result.output_path}")
@@ -740,7 +782,7 @@ def feishu_push(ctx, stage: str, limit: int | None):
 
         from passive_agent.storage.models import EnrichedItem
         enriched = [EnrichedItem(item=item, related_zotero=[], related_stars=[]) for item in items]
-        if not feishu_bot.send_daily_card(enriched, respect_pause=False):
+        if not feishu_bot.send_daily_card(enriched, respect_pause=False, surface="manual"):
             click.echo("Error: Feishu push failed", err=True)
             raise SystemExit(1)
 

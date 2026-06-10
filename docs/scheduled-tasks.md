@@ -12,12 +12,13 @@
 scripts/install_launchd.sh
 ```
 
-这个脚本会安装 3 个任务：
+这个脚本会安装 4 个任务：
 
 | 服务 | 做什么 |
 |---|---|
 | `com.passive-agent.daily` | 每天 21:00 跑一次 `daily` |
 | `com.passive-agent.weekend` | 每周六 10:00 推送周末阅读队列 |
+| `com.passive-agent.weekly-report` | 每周日 21:30 推送周报 |
 | `com.passive-agent.serve` | 常驻飞书长连接服务 |
 
 ### 查看服务
@@ -29,8 +30,8 @@ launchctl list | grep passive-agent
 日志通常在：
 
 ```text
-data/reports/*stdout.log
-data/reports/*stderr.log
+data/logs/*stdout.log
+data/logs/*stderr.log
 ```
 
 ### TCC 权限注意

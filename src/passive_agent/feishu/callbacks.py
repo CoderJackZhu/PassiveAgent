@@ -14,6 +14,18 @@ from passive_agent.utils.config import AppConfig
 from passive_agent.utils.logger import log
 
 
+ACTION_EVENT_TYPES = {
+    "expand": "expand",
+    "card": "generate_card",
+    "note": "generate_note",
+    "ignore": "ignore",
+    "weekend": "weekend",
+    "read": "read",
+    "link": "link",
+    "mute": "mute",
+}
+
+
 class CallbackHandler:
     """处理飞书卡片按钮回调"""
 
@@ -37,6 +49,9 @@ class CallbackHandler:
             return None
 
         log.info(f"Callback: action={action}, item_id={item_id}")
+
+        if action in ACTION_EVENT_TYPES:
+            self._record_action_event(item_id, action)
 
         if action == "expand":
             return await self._handle_expand(item_id)
@@ -166,3 +181,8 @@ class CallbackHandler:
         handler = MuteSimilarAction(self.db, self.config.scoring.negative_feedback)
         result = await handler.execute(item_id)
         return {"type": "toast", "text": result.message}
+
+    def _record_action_event(self, item_id: str, action: str):
+        event_type = ACTION_EVENT_TYPES.get(action)
+        if event_type:
+            self.db.record_item_event(item_id, event_type, surface="feishu_card")

@@ -181,7 +181,13 @@ class FeishuBot:
             log.error(f"Error handling card action: {e}")
             return self._toast(f"处理失败：{e}", toast_type="error")
 
-    def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
+    def send_daily_card(
+        self,
+        items: list[EnrichedItem],
+        *,
+        respect_pause: bool = True,
+        surface: str = "daily",
+    ) -> bool:
         """发送每日推荐卡片"""
         if not self.chat_id:
             log.warning("FEISHU_CHAT_ID not set, skipping push")
@@ -193,6 +199,7 @@ class FeishuBot:
 
         card = CardBuilder.build_daily_card(items)
         if self._send_card(self.chat_id, card):
+            self._record_pushed_events(items, surface)
             log.info(f"Daily card sent to chat {self.chat_id}")
             return True
         return False
@@ -205,9 +212,32 @@ class FeishuBot:
 
         card = CardBuilder.build_weekend_card(items)
         if self._send_card(self.chat_id, card):
+            self._record_pushed_events(items, "weekend")
             log.info(f"Weekend card sent to chat {self.chat_id} ({len(items)} items)")
             return True
         return False
+
+    def send_weekly_report_card(self, report: dict) -> bool:
+        """发送周报卡片"""
+        if not self.chat_id:
+            log.warning("FEISHU_CHAT_ID not set, skipping weekly report push")
+            return False
+
+        card = CardBuilder.build_weekly_report_card(report)
+        if self._send_card(self.chat_id, card):
+            log.info(f"Weekly report card sent to chat {self.chat_id}")
+            return True
+        return False
+
+    def _record_pushed_events(self, items: list[EnrichedItem], surface: str):
+        for rank, enriched in enumerate(items, 1):
+            item = enriched.item
+            self.db.record_item_event(
+                item.id,
+                "pushed",
+                surface=surface,
+                metadata={"rank": rank, "title": item.title},
+            )
 
     def send_error_notification(self, error: str):
         """发送错误通知"""

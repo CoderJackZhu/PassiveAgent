@@ -194,6 +194,42 @@ class CardBuilder:
             "elements": elements,
         }
 
+    @staticmethod
+    def build_weekly_report_card(report: dict) -> dict:
+        week_start = report["week_start"]
+        week_end = report["week_end"]
+        summary = report["summary"]
+        suggestions = report.get("suggestions") or []
+        engagement_rate = summary.get("engagement_rate", 0.0)
+
+        lines = [
+            f"Pushed: {summary.get('pushed_items', 0)}",
+            f"Engaged: {summary.get('engaged_items', 0)} ({engagement_rate:.0%})",
+            f"Read: {summary.get('read_items', 0)}",
+            f"Ignored: {summary.get('ignored_items', 0)}",
+            f"Passive: {summary.get('passive_items', 0)}",
+            f"Report: {report.get('report_path', '')}",
+        ]
+        elements = [{"tag": "markdown", "content": "\n".join(lines)}]
+        if suggestions:
+            elements.append({"tag": "hr"})
+            elements.append({
+                "tag": "markdown",
+                "content": "\n".join(f"- {suggestion}" for suggestion in suggestions[:3]),
+            })
+
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": f"周报 · {week_start.isoformat()} ~ {week_end.isoformat()}",
+                },
+                "template": "blue",
+            },
+            "elements": elements,
+        }
+
 
 def _button(text: str, btn_type: str, value: dict) -> dict:
     return {

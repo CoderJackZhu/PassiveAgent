@@ -106,8 +106,8 @@ main() {
 
     preflight_project_dir
 
-    # Ensure reports and LaunchAgents directories exist
-    mkdir -p "$PROJECT_DIR/data/reports"
+    # Ensure log and LaunchAgents directories exist
+    mkdir -p "$PROJECT_DIR/data/logs"
     mkdir -p "$PLIST_DIR"
 
     # Install each plist (substitute __PROJECT_DIR__ placeholder)
@@ -133,6 +133,7 @@ main() {
     echo "  - com.passive-agent.daily    (每天 21:00 运行 pipeline)"
     echo "  - com.passive-agent.serve    (飞书 Bot 常驻, KeepAlive)"
     echo "  - com.passive-agent.weekend  (每周六 10:00 推送周末队列)"
+    echo "  - com.passive-agent.weekly-report  (每周日 21:30 推送周报)"
     echo ""
     echo "Tip: non-empty values from .env are written into the plists for:"
     echo "  XIAOMI_API_KEY, XIAOMI_BASE_URL, DEEPSEEK_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_CHAT_ID, GITHUB_TOKEN"
