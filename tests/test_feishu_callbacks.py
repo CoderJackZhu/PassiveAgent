@@ -1,8 +1,14 @@
 import asyncio
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from passive_agent.feishu.callbacks import CallbackHandler
 from passive_agent.storage.models import Item
+
+
+class FailingLLM:
+    async def generate(self, system: str, user: str) -> str:
+        raise TimeoutError("upstream too slow")
 
 
 def test_callback_card_requires_llm(config_dir, db):
@@ -59,6 +65,33 @@ def test_callback_records_weekend_event_after_success(config_dir, db):
     assert [(event["item_id"], event["event_type"]) for event in events] == [
         ("weekend-item", "weekend")
     ]
+
+
+def test_callback_expand_falls_back_to_local_card_when_llm_times_out(config_dir, db):
+    from passive_agent.utils.config import load_config
+
+    db.save_item(
+        Item(
+            id="slow-expand",
+            source="hf_daily_papers",
+            title="Slow Expand Paper",
+            url="https://example.test/paper",
+            topics=["Agent"],
+            summary="已有短摘要",
+            interview_relevance="面试相关点",
+        )
+    )
+    config = load_config(config_dir)
+    handler = CallbackHandler(config, db, llm=cast(Any, FailingLLM()))
+
+    result = asyncio.run(handler.handle({"action": "expand", "item_id": "slow-expand"}))
+
+    assert result is not None
+    assert result["type"] == "new_message"
+    card_json = str(result["card"])
+    assert "LLM 展开暂时不可用" in card_json
+    assert "已有短摘要" in card_json
+    assert "https://example.test/paper" in card_json
 
 
 def test_callback_records_failed_known_click_once(config_dir, db, monkeypatch):

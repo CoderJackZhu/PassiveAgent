@@ -67,6 +67,7 @@ def _build_llm(config, *, required: bool = False):
         max_concurrency=config.llm.max_concurrency,
         max_retries=config.llm.max_retries,
         retry_backoff_base_seconds=config.llm.retry_backoff_base_seconds,
+        request_timeout_seconds=getattr(config.llm, "request_timeout_seconds", 45.0),
     )
 
 

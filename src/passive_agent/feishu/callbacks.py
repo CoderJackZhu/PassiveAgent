@@ -90,13 +90,37 @@ class CallbackHandler:
             f"{'链接：' + item.url if item.url else ''}"
         )
 
-        detail = await self.llm.generate(
-            system="你是面试准备助手，生成详细的内容分析。使用中文。",
-            user=prompt,
-        )
+        try:
+            detail = await self.llm.generate(
+                system="你是面试准备助手，生成详细的内容分析。使用中文。",
+                user=prompt,
+            )
+        except Exception as exc:
+            log.warning(f"Expand LLM generation failed for {item_id}; using local fallback: {exc}")
+            detail = self._build_expand_fallback(item, exc)
 
         card = CardBuilder.build_expand_card(item, detail)
         return {"type": "new_message", "card": card}
+
+    def _build_expand_fallback(self, item, exc: Exception) -> str:
+        parts = [
+            "⚠️ LLM 展开暂时不可用，已先返回本地已有信息，避免飞书后台操作继续卡住。",
+            f"失败原因：{exc.__class__.__name__}: {str(exc).strip() or '请求超时/被取消'}",
+            "",
+            f"**标题**：{item.title}",
+            f"**来源**：{item.source}",
+        ]
+        if item.topics:
+            parts.append(f"**主题**：{', '.join(item.topics)}")
+        if item.summary:
+            parts.append(f"**已有摘要**：{item.summary}")
+        if item.interview_relevance:
+            parts.append(f"**面试关联**：{item.interview_relevance}")
+        if item.url:
+            parts.append(f"**链接**：{item.url}")
+        parts.append("")
+        parts.append("建议稍后重试展开，或直接生成面试卡/技术笔记。")
+        return "\n".join(parts)
 
     async def _handle_card(self, item_id: str) -> dict | None:
         if self.llm is None:

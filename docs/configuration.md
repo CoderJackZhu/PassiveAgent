@@ -46,6 +46,7 @@ llm:
   max_concurrency: 5                        # 最大并发请求数
   max_retries: 3                            # 失败重试次数
   retry_backoff_base_seconds: 2.0           # 重试退避基础秒数
+  request_timeout_seconds: 45.0             # 单次 LLM 请求超时；飞书按钮操作应小于后台超时预算
 ```
 
 **注意**：`api_key_env` 只是环境变量名，真正的密钥通过 `.env` 或系统环境变量设置，不要写在 YAML 里。当前线上配置使用小米 MiMo Token Plan；`tp-...` key 必须配 Token Plan 专用 Base URL，不能和 pay-as-you-go 的 `sk-...` key/endpoint 混用。

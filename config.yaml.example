@@ -19,6 +19,7 @@ llm:
   max_concurrency: 5
   max_retries: 3
   retry_backoff_base_seconds: 2.0
+  request_timeout_seconds: 45.0           # 单次 LLM 请求超时；避免飞书后台操作被慢供应商拖满 180s
 
 # ---- 目标与优先级 ----
 goals:

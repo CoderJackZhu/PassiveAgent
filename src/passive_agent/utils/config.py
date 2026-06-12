@@ -24,6 +24,7 @@ class LLMConfig:
     max_concurrency: int = 5
     max_retries: int = 3
     retry_backoff_base_seconds: float = 2.0
+    request_timeout_seconds: float = 45.0
 
 
 @dataclass
@@ -253,6 +254,7 @@ def load_config(config_dir: str = "config") -> AppConfig:
         max_concurrency=llm_data.get("max_concurrency", 5),
         max_retries=llm_data.get("max_retries", 3),
         retry_backoff_base_seconds=llm_data.get("retry_backoff_base_seconds", 2.0),
+        request_timeout_seconds=llm_data.get("request_timeout_seconds", 45.0),
     )
 
     recommendations = RecommendationConfig(

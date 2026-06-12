@@ -11,6 +11,7 @@ def test_load_config(config_dir):
     assert config.db_path == str(root / "data/workbench.db")
     assert config.llm.provider == "deepseek"
     assert config.llm.api_key_env == "DEEPSEEK_API_KEY"
+    assert config.llm.request_timeout_seconds == 45.0
     assert config.recommendations.stale_after_days == 7
     assert config.display.dashboard_limit == 10
     assert config.feishu.async_timeout_seconds == 60.0
@@ -43,6 +44,7 @@ llm:
   max_concurrency: 2
   max_retries: 4
   retry_backoff_base_seconds: 1.5
+  request_timeout_seconds: 12.5
 recommendations:
   stale_after_days: 11
   related_zotero_limit: 1
@@ -92,6 +94,7 @@ scoring:
     assert config.llm.max_concurrency == 2
     assert config.llm.max_retries == 4
     assert config.llm.retry_backoff_base_seconds == 1.5
+    assert config.llm.request_timeout_seconds == 12.5
     assert config.recommendations.stale_after_days == 11
     assert config.recommendations.related_zotero_limit == 1
     assert config.recommendations.related_stars_limit == 2

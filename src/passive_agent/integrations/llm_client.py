@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 
 from openai import AsyncOpenAI
 
@@ -20,6 +21,7 @@ class LLMClient:
         temperature: float = 0.3,
         max_retries: int = 3,
         retry_backoff_base_seconds: float = 2.0,
+        request_timeout_seconds: float = 45.0,
     ):
         self.api_key_env = api_key_env
         self.api_key = api_key or os.environ.get(api_key_env, "")
@@ -27,7 +29,17 @@ class LLMClient:
             raise ValueError(f"{api_key_env} not set")
 
         self.base_url = base_url
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=base_url)
+        self.request_timeout_seconds = max(1.0, request_timeout_seconds)
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=base_url,
+            timeout=self.request_timeout_seconds,
+            # The SDK has its own retry loop by default. PassiveAgent already
+            # retries explicitly below; disabling SDK retries keeps one Feishu
+            # button click bounded by llm.request_timeout_seconds × max_retries
+            # instead of silently multiplying slow upstream calls.
+            max_retries=0,
+        )
         self.model = model
         self.max_concurrency = max(1, max_concurrency)
         self.temperature = temperature
@@ -49,17 +61,28 @@ class LLMClient:
                 kwargs["response_format"] = {"type": "json_object"}
 
             for attempt in range(self.max_retries):
+                start = time.perf_counter()
                 try:
                     response = await self.client.chat.completions.create(**kwargs)
+                    elapsed = time.perf_counter() - start
+                    log.info(f"LLM request completed in {elapsed:.1f}s (model={self.model})")
                     return response.choices[0].message.content or ""
                 except Exception as e:
+                    elapsed = time.perf_counter() - start
                     if "401" in str(e) or "authentication" in str(e).lower():
                         raise
                     if attempt < self.max_retries - 1:
                         wait = self.retry_backoff_base_seconds * (2 ** attempt)
-                        log.warning(f"LLM API error (retry in {wait:g}s): {e}")
+                        log.warning(
+                            f"LLM API error after {elapsed:.1f}s "
+                            f"(attempt {attempt + 1}/{self.max_retries}, retry in {wait:g}s): {e}"
+                        )
                         await asyncio.sleep(wait)
                     else:
+                        log.warning(
+                            f"LLM API failed after {elapsed:.1f}s "
+                            f"(attempt {attempt + 1}/{self.max_retries}): {e}"
+                        )
                         raise
 
     async def generate_json(self, system: str, user: str) -> dict:
