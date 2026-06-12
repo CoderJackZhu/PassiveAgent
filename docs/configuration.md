@@ -191,7 +191,8 @@ display:
 
 ```yaml
 feishu:
-  async_timeout_seconds: 60.0    # 飞书异步操作超时（消息处理、卡片回调）
+  async_timeout_seconds: 60.0              # 文本命令/快回调超时
+  background_action_timeout_seconds: 180.0 # 展开/生成卡片/生成笔记等后台慢操作超时
 ```
 
 ## scoring 部分

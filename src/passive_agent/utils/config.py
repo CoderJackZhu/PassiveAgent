@@ -45,6 +45,7 @@ class DisplayConfig:
 @dataclass
 class FeishuConfig:
     async_timeout_seconds: float = 60.0
+    background_action_timeout_seconds: float = 180.0
 
 
 @dataclass
@@ -270,6 +271,9 @@ def load_config(config_dir: str = "config") -> AppConfig:
 
     feishu = FeishuConfig(
         async_timeout_seconds=feishu_data.get("async_timeout_seconds", 60.0),
+        background_action_timeout_seconds=feishu_data.get(
+            "background_action_timeout_seconds", 180.0
+        ),
     )
 
     return AppConfig(

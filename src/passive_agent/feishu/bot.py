@@ -42,6 +42,16 @@ def _run_async(coro, timeout_seconds: float = 60.0):
         return future.result(timeout=timeout_seconds + 1)
 
 
+def _format_background_action_error(exc: Exception, timeout_seconds: float) -> str:
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return (
+            f"处理超时：后台操作超过 {timeout_seconds:g} 秒未完成，请稍后重试或调高 "
+            "feishu.background_action_timeout_seconds"
+        )
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
 class FeishuBot:
     """飞书 Bot - 长连接模式"""
 
@@ -143,14 +153,21 @@ class FeishuBot:
                         callback_handler = CallbackHandler(self.config, thread_db, self.llm)
                         result = _run_async(
                             callback_handler.handle(action_value),
-                            timeout_seconds=self.config.feishu.async_timeout_seconds,
+                            timeout_seconds=self.config.feishu.background_action_timeout_seconds,
                         )
                         if result and result.get("type") == "new_message" and chat_id:
                             self._send_card(chat_id, result["card"])
                     except Exception as e:
-                        log.error(f"Background card action failed: {e}")
+                        log.exception("Background card action failed")
                         if chat_id:
-                            self._reply_text(chat_id, f"处理失败：{e}")
+                            self._reply_text(
+                                chat_id,
+                                "处理失败："
+                                + _format_background_action_error(
+                                    e,
+                                    self.config.feishu.background_action_timeout_seconds,
+                                ),
+                            )
                     finally:
                         thread_db.close()
 

@@ -14,6 +14,7 @@ def test_load_config(config_dir):
     assert config.recommendations.stale_after_days == 7
     assert config.display.dashboard_limit == 10
     assert config.feishu.async_timeout_seconds == 60.0
+    assert config.feishu.background_action_timeout_seconds == 180.0
     assert config.goals.current_focus == "test"
     assert "Agent" in config.goals.priority_topics
     assert config.sources.zotero.enabled is False
@@ -54,6 +55,7 @@ display:
   manual_push_limit: 7
 feishu:
   async_timeout_seconds: 12.5
+  background_action_timeout_seconds: 90.0
 sources:
   zotero:
     sqlite_timeout_seconds: 8.0
@@ -99,6 +101,7 @@ scoring:
     assert config.display.weekly_processed_limit == 6
     assert config.display.manual_push_limit == 7
     assert config.feishu.async_timeout_seconds == 12.5
+    assert config.feishu.background_action_timeout_seconds == 90.0
     assert config.sources.zotero.sqlite_timeout_seconds == 8.0
     assert config.sources.zotero.db_retries == 5
     assert config.sources.zotero.db_retry_sleep_seconds == 0.25

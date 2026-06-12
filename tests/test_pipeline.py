@@ -102,6 +102,17 @@ def test_feishu_bot_records_weekend_pushed_events(db):
     ]
 
 
+def test_feishu_bot_background_timeout_error_message_is_actionable():
+    import asyncio
+
+    from passive_agent.feishu.bot import _format_background_action_error
+
+    assert _format_background_action_error(asyncio.TimeoutError(), 180.0) == (
+        "处理超时：后台操作超过 180 秒未完成，请稍后重试或调高 "
+        "feishu.background_action_timeout_seconds"
+    )
+
+
 def test_pipeline_initializes_collectors_with_configured_knobs(config_dir, db):
     config = load_config(config_dir)
     config.sources.zotero.enabled = True
