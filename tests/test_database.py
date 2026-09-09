@@ -1,8 +1,10 @@
 import sqlite3
 from datetime import date, datetime, timedelta
 
+import pytest
+
 from passive_agent.storage.database import Database
-from passive_agent.storage.models import Item
+from passive_agent.storage.models import Item, Score
 
 
 def test_database_initialize(db):
@@ -55,6 +57,26 @@ def test_get_all_titles(db):
     titles = db.get_all_titles()
     assert "Article A" in titles
     assert "Article B" in titles
+
+
+def test_save_scored_items_rolls_back_items_when_a_score_insert_fails(db):
+    item = Item(id="atomic-item", source="zotero", title="Atomic item")
+    score = Score(
+        item_id="missing-item",
+        goal_relevance=80,
+        novelty=70,
+        actionability=75,
+        difficulty_fit=65,
+        source_quality=85,
+        timeliness=70,
+        weighted_total=75,
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        db.save_scored_items([item], [score])
+
+    assert db.get_all_titles() == set()
+    assert db.conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0] == 0
 
 
 def test_update_stage(db):

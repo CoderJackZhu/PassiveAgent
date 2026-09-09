@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from passive_agent.integrations.llm_client import LLMClient
 
 
@@ -19,3 +23,50 @@ def test_llm_client_clamps_request_timeout():
 
     assert client.request_timeout_seconds == 1.0
     assert client.client.timeout == 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        '<think>reasoning about the response</think>\n\n{"summary": "ok"}',
+        '<think>reasoning about the response</think>\n\n```json\n{"summary": "ok"}\n```',
+    ],
+)
+async def test_generate_json_accepts_minimax_think_prefix(response, monkeypatch):
+    client = LLMClient(api_key="test-key")
+
+    async def fake_generate(system: str, user: str, expect_json: bool = False) -> str:
+        return response
+
+    monkeypatch.setattr(client, "generate", fake_generate)
+
+    assert await client.generate_json("system", "user") == {"summary": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_generate_json_rejects_arbitrary_text_before_json(monkeypatch):
+    client = LLMClient(api_key="test-key")
+
+    async def fake_generate(system: str, user: str, expect_json: bool = False) -> str:
+        return 'Here is the result: {"summary": "ok"}'
+
+    monkeypatch.setattr(client, "generate", fake_generate)
+
+    with pytest.raises(json.JSONDecodeError):
+        await client.generate_json("system", "user")
+
+
+@pytest.mark.asyncio
+async def test_generate_json_preserves_think_tags_inside_json_strings(monkeypatch):
+    client = LLMClient(api_key="test-key")
+    response = '{"summary": "keep <think>literal</think> text"}'
+
+    async def fake_generate(system: str, user: str, expect_json: bool = False) -> str:
+        return response
+
+    monkeypatch.setattr(client, "generate", fake_generate)
+
+    assert await client.generate_json("system", "user") == {
+        "summary": "keep <think>literal</think> text"
+    }

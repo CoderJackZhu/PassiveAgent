@@ -60,6 +60,27 @@ class FakeBot:
         return self.result
 
 
+class SelectiveFailingLLM(FakeLLM):
+    def __init__(self, failure_stage: str, failed_title: str):
+        self.failure_stage = failure_stage
+        self.failed_title = failed_title
+
+    async def generate_json(self, system: str, user: str) -> dict:
+        stage = "score" if "评分" in system else "summary"
+        if stage == self.failure_stage and self.failed_title in user:
+            raise ValueError(f"simulated {stage} failure")
+        return await super().generate_json(system, user)
+
+
+class RecordingBot:
+    def __init__(self):
+        self.batches: list[list[EnrichedItem]] = []
+
+    def send_daily_card(self, items: list[EnrichedItem], *, respect_pause: bool = True) -> bool:
+        self.batches.append(items)
+        return True
+
+
 def test_feishu_bot_records_pushed_events_only_after_success(db):
     from passive_agent.feishu.bot import FeishuBot
 
@@ -234,6 +255,142 @@ async def test_daily_pipeline_records_actual_push_count(
     errors = json.loads(row["errors"])
     assert row["pushed_count"] == expected_pushed
     assert bool(errors) is expect_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["summary", "score"])
+async def test_daily_pipeline_total_llm_failure_is_error_and_items_remain_retryable(
+    config_dir, db, tmp_path, failure_stage
+):
+    config = load_config(config_dir)
+    config.project_root = ""
+    config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
+
+    title = f"Retry after {failure_stage} failure"
+    raw = RawItem(source="zotero", title=title, url=f"https://example.com/{failure_stage}")
+    bot = RecordingBot()
+    pipeline = DailyPipeline(
+        config,
+        db,
+        llm=SelectiveFailingLLM(failure_stage, title),
+        feishu_bot=bot,
+    )
+    pipeline._init_collectors = lambda: [FakeCollector([raw])]
+
+    failed = await pipeline.run()
+
+    assert failed.status == "error"
+    assert failed.recommended == []
+    assert failed.pushed == 0
+    assert bot.batches == []
+    assert db.get_all_titles() == set()
+    assert not (Path(config.reports_dir) / f"daily_review_{date.today().isoformat()}.md").exists()
+    assert any(failure_stage in error and "retry" in error.lower() for error in failed.errors)
+
+    row = db.conn.execute(
+        "SELECT status, pushed_count, errors FROM daily_log WHERE date = ?",
+        (date.today().isoformat(),),
+    ).fetchone()
+    assert row["status"] == "error"
+    assert row["pushed_count"] == 0
+    assert title in " ".join(json.loads(row["errors"]))
+
+    pipeline.llm = FakeLLM()
+    retried = await pipeline.run()
+
+    assert retried.status == "success"
+    assert [item.item.title for item in retried.recommended] == [title]
+    assert db.get_all_titles() == {title}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["summary", "score"])
+async def test_daily_pipeline_partial_llm_failure_only_processes_successes(
+    config_dir, db, tmp_path, failure_stage
+):
+    config = load_config(config_dir)
+    config.project_root = ""
+    config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
+
+    good_title = f"Good item for {failure_stage}"
+    failed_title = f"Failed item for {failure_stage}"
+    raw_items = [
+        RawItem(source="zotero", title=good_title, url=f"https://example.com/good-{failure_stage}"),
+        RawItem(source="zotero", title=failed_title, url=f"https://example.com/bad-{failure_stage}"),
+    ]
+    bot = RecordingBot()
+    pipeline = DailyPipeline(
+        config,
+        db,
+        llm=SelectiveFailingLLM(failure_stage, failed_title),
+        feishu_bot=bot,
+    )
+    pipeline._init_collectors = lambda: [FakeCollector(raw_items)]
+
+    result = await pipeline.run()
+
+    assert result.status == "success"
+    assert [item.item.title for item in result.recommended] == [good_title]
+    assert [[item.item.title for item in batch] for batch in bot.batches] == [[good_title]]
+    assert db.get_all_titles() == {good_title}
+    assert all(item.item.priority_score != 50.0 for item in result.recommended)
+    assert any(failure_stage in error and failed_title in error for error in result.errors)
+
+    report = Path(config.reports_dir) / f"daily_review_{date.today().isoformat()}.md"
+    report_text = report.read_text(encoding="utf-8")
+    assert good_title in report_text
+    assert failed_title not in report_text
+
+    retry_bot = RecordingBot()
+    retry_pipeline = DailyPipeline(config, db, llm=FakeLLM(), feishu_bot=retry_bot)
+    retry_pipeline._init_collectors = lambda: [FakeCollector([raw_items[1]])]
+
+    retried = await retry_pipeline.run()
+
+    assert retried.status == "success"
+    assert [item.item.title for item in retried.recommended] == [failed_title]
+
+
+@pytest.mark.asyncio
+async def test_daily_pipeline_enrich_failure_leaves_scored_item_retryable(
+    config_dir, db, tmp_path, monkeypatch
+):
+    config = load_config(config_dir)
+    config.project_root = ""
+    config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
+
+    title = "Retry after enrich failure"
+    raw = RawItem(source="zotero", title=title, url="https://example.com/enrich-failure")
+    bot = RecordingBot()
+    pipeline = DailyPipeline(config, db, llm=FakeLLM(), feishu_bot=bot)
+    pipeline._init_collectors = lambda: [FakeCollector([raw])]
+    original_enrich = Ranker.enrich
+
+    def fail_enrich(_self, _items):
+        raise RuntimeError("simulated enrich failure")
+
+    monkeypatch.setattr(Ranker, "enrich", fail_enrich)
+
+    failed = await pipeline.run()
+
+    assert failed.status == "error"
+    assert failed.recommended == []
+    assert failed.pushed == 0
+    assert bot.batches == []
+    assert db.get_all_titles() == set()
+    assert db.conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0] == 0
+    assert not (Path(config.reports_dir) / f"daily_review_{date.today().isoformat()}.md").exists()
+
+    monkeypatch.setattr(Ranker, "enrich", original_enrich)
+    retried = await pipeline.run()
+
+    assert retried.status == "success"
+    assert [item.item.title for item in retried.recommended] == [title]
+    assert db.get_all_titles() == {title}
+    assert db.conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0] == 1
 
 
 @pytest.mark.asyncio

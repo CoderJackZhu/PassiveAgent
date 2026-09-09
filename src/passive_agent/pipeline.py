@@ -168,15 +168,38 @@ class DailyPipeline:
             # 4. Summarize
             summarizer = Summarizer(self.llm, self.config.goals, self.prompts_dir)
             summarized = await summarizer.summarize_batch(new_items)
-
-            # 保存已摘要的条目（scorer 的 save_score 需要 items 表中有记录）
-            self.db.save_items(summarized)
+            errors.extend(summarizer.errors)
+            if not summarized:
+                self.db.log_daily_run(
+                    date.today(), collected_count, processed_count, 0, errors,
+                    status="error",
+                )
+                return PipelineResult(
+                    status="error",
+                    collected=collected_count,
+                    processed=processed_count,
+                    stale=stale_count,
+                    errors=errors,
+                )
 
             # 5. Score
             scorer = Scorer(self.llm, self.config.goals, self.config.scoring, self.db,
                             prompts_dir=self.prompts_dir,
                             high_priority_collections=self.config.sources.zotero.high_priority_collections)
             scored = await scorer.score_batch(summarized)
+            errors.extend(scorer.errors)
+            if not scored:
+                self.db.log_daily_run(
+                    date.today(), collected_count, processed_count, 0, errors,
+                    status="error",
+                )
+                return PipelineResult(
+                    status="error",
+                    collected=collected_count,
+                    processed=processed_count,
+                    stale=stale_count,
+                    errors=errors,
+                )
 
             # 6. Rank + Top N
             ranker = Ranker(
@@ -199,7 +222,7 @@ class DailyPipeline:
                     item.stage = "summarized"
             for item in top_items:
                 item.stage = "recommended"
-            self.db.save_items(scored)
+            self.db.save_scored_items(scored, scorer.scores)
 
             # 9. 输出本地报告
             self._output_daily_review(enriched)

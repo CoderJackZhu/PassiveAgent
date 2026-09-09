@@ -87,9 +87,30 @@ class LLMClient:
 
     async def generate_json(self, system: str, user: str) -> dict:
         text = await self.generate(system, user, expect_json=True)
-        text = text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
+        text = _strip_think_prefix(text).strip()
+        text = _strip_markdown_json_fence(text)
         return json.loads(text)
+
+
+def _strip_think_prefix(text: str) -> str:
+    """Remove one leading reasoning block emitted before a JSON response."""
+    stripped = text.lstrip()
+    if not stripped.startswith("<think>"):
+        return text
+
+    closing_tag = "</think>"
+    closing_index = stripped.find(closing_tag)
+    if closing_index == -1:
+        return text
+    return stripped[closing_index + len(closing_tag):]
+
+
+def _strip_markdown_json_fence(text: str) -> str:
+    lines = text.splitlines()
+    if (
+        len(lines) >= 3
+        and lines[0].strip().casefold() in {"```", "```json"}
+        and lines[-1].strip() == "```"
+    ):
+        return "\n".join(lines[1:-1]).strip()
+    return text

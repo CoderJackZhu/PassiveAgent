@@ -198,6 +198,10 @@ class Database:
     # --- Items ---
 
     def save_item(self, item: Item):
+        with self.conn:
+            self._insert_item(item)
+
+    def _insert_item(self, item: Item):
         data = item.to_dict()
         columns = ", ".join(data.keys())
         placeholders = ", ".join("?" * len(data))
@@ -205,18 +209,18 @@ class Database:
             f"INSERT OR REPLACE INTO items ({columns}) VALUES ({placeholders})",
             list(data.values()),
         )
-        self.conn.commit()
 
     def save_items(self, items: list[Item]):
-        for item in items:
-            data = item.to_dict()
-            columns = ", ".join(data.keys())
-            placeholders = ", ".join("?" * len(data))
-            self.conn.execute(
-                f"INSERT OR REPLACE INTO items ({columns}) VALUES ({placeholders})",
-                list(data.values()),
-            )
-        self.conn.commit()
+        with self.conn:
+            for item in items:
+                self._insert_item(item)
+
+    def save_scored_items(self, items: list[Item], scores: list[Score]):
+        with self.conn:
+            for item in items:
+                self._insert_item(item)
+            for score in scores:
+                self._insert_score(score)
 
     def get_item(self, item_id: str) -> Item | None:
         row = self.conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
@@ -305,6 +309,10 @@ class Database:
     # --- Scores ---
 
     def save_score(self, score: Score):
+        with self.conn:
+            self._insert_score(score)
+
+    def _insert_score(self, score: Score):
         self.conn.execute(
             """INSERT INTO scores (item_id, goal_relevance, novelty, actionability,
                difficulty_fit, source_quality, timeliness, weighted_total, scored_at)
@@ -321,7 +329,6 @@ class Database:
                 score.scored_at.isoformat(),
             ),
         )
-        self.conn.commit()
 
     # --- Feedback ---
 

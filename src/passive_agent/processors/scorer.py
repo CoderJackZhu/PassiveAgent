@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -24,22 +25,31 @@ class Scorer:
         self.high_priority_collections = high_priority_collections or []
         self.jinja = Environment(loader=FileSystemLoader(prompts_dir))
         self.template = self.jinja.get_template("score.md.j2")
+        self.errors: list[str] = []
+        self.scores: list[Score] = []
 
     async def score_batch(self, items: list[Item]) -> list[Item]:
         existing_cards = self.db.get_archived_titles()
         log.info(f"Scoring {len(items)} items (existing cards: {len(existing_cards)})...")
+        self.errors = []
+        self.scores = []
 
         tasks = [self._score_one(item, existing_cards) for item in items]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        scored = []
+        scored: list[Item] = []
         for item, result in zip(items, results):
             if isinstance(result, Exception):
-                log.warning(f"Failed to score '{item.title}': {result}")
-                item.priority_score = 50.0  # 默认中等分
-                scored.append(item)
+                msg = (
+                    f"LLM score failed for '{item.title}': {result}; "
+                    "item not persisted and will retry"
+                )
+                log.warning(msg)
+                self.errors.append(msg)
             else:
-                scored.append(result)
+                scored_item, score = result
+                scored.append(scored_item)
+                self.scores.append(score)
 
         # 应用 topic/source 动态权重
         for item in scored:
@@ -47,11 +57,10 @@ class Scorer:
             if item.priority_score:
                 item.priority_score *= adjustment
 
-        scored_count = sum(1 for i in scored if i.priority_score and i.priority_score != 50.0)
-        log.info(f"Scored {scored_count}/{len(items)} items via LLM")
+        log.info(f"Scored {len(scored)}/{len(items)} items via LLM")
         return scored
 
-    async def _score_one(self, item: Item, existing_cards: list[str]) -> Item:
+    async def _score_one(self, item: Item, existing_cards: list[str]) -> tuple[Item, Score]:
         prompt = self.template.render(
             title=item.title,
             summary=item.summary or "",
@@ -67,8 +76,9 @@ class Scorer:
             user=prompt,
         )
         if not isinstance(data, dict):
-            log.warning(f"Score LLM returned non-object for '{item.title}': {type(data).__name__}")
-            data = {}
+            raise ValueError(
+                f"Score LLM returned non-object for '{item.title}': {type(data).__name__}"
+            )
 
         goal_relevance = _as_score(data.get("goal_relevance"), "goal_relevance", item.title)
         novelty = _as_score(data.get("novelty"), "novelty", item.title)
@@ -97,10 +107,8 @@ class Scorer:
             timeliness=timeliness,
             weighted_total=weighted_total,
         )
-        self.db.save_score(score)
-
         item.priority_score = weighted_total
-        return item
+        return item, score
 
     def _calc_weight_adjustment(self, item: Item) -> float:
         adjustment = 1.0
@@ -121,10 +129,9 @@ class Scorer:
 
 
 def _as_score(value, field: str, title: str) -> float:
-    if isinstance(value, bool):
-        log.warning(f"Invalid score {field} for '{title}': bool")
-        return 50.0
-    if isinstance(value, int | float):
-        return float(value)
-    log.warning(f"Invalid score {field} for '{title}': {value!r}")
-    return 50.0
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"Invalid score {field} for '{title}': expected number, got {value!r}")
+    score = float(value)
+    if not math.isfinite(score) or not 0.0 <= score <= 100.0:
+        raise ValueError(f"Invalid score {field} for '{title}': {value!r} outside 0-100")
+    return score

@@ -9,6 +9,9 @@ from passive_agent.storage.models import Item
 from passive_agent.utils.config import GoalsConfig
 from passive_agent.utils.logger import log
 
+VALID_ACTIONS = frozenset({"read", "make_card", "make_note", "ignore"})
+VALID_CONTENT_TYPES = frozenset({"paper", "article", "note", "repo", "doc"})
+
 
 class Summarizer:
     def __init__(self, llm: LLMClient, goals: GoalsConfig, prompts_dir: str = "prompts"):
@@ -16,22 +19,27 @@ class Summarizer:
         self.goals = goals
         self.jinja = Environment(loader=FileSystemLoader(prompts_dir))
         self.template = self.jinja.get_template("summarize.md.j2")
+        self.errors: list[str] = []
 
     async def summarize_batch(self, items: list[Item]) -> list[Item]:
         log.info(f"Summarizing {len(items)} items...")
+        self.errors = []
         tasks = [self._summarize_one(item) for item in items]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         succeeded = []
         for item, result in zip(items, results):
             if isinstance(result, Exception):
-                log.warning(f"Failed to summarize '{item.title}': {result}")
-                succeeded.append(item)  # 保留但不更新摘要
+                msg = (
+                    f"LLM summary failed for '{item.title}': {result}; "
+                    "item not persisted and will retry"
+                )
+                log.warning(msg)
+                self.errors.append(msg)
             else:
                 succeeded.append(result)
 
-        summarized_count = sum(1 for i in succeeded if i.summary is not None)
-        log.info(f"Summarized {summarized_count}/{len(items)} items successfully")
+        log.info(f"Summarized {len(succeeded)}/{len(items)} items successfully")
         return succeeded
 
     async def _summarize_one(self, item: Item) -> Item:
@@ -59,38 +67,59 @@ class Summarizer:
         )
 
         if not isinstance(data, dict):
-            log.warning(f"Summary LLM returned non-object for '{item.title}': {type(data).__name__}")
-            data = {}
+            raise ValueError(
+                f"Summary LLM returned non-object for '{item.title}': {type(data).__name__}"
+            )
 
-        item.summary = _as_string(data.get("summary"), "")
-        item.interview_relevance = _as_string(data.get("interview_relevance"), "")
-        item.recommended_action = _as_string(data.get("recommended_action"), "read")
-        item.estimated_minutes = _as_int(data.get("estimated_minutes"), 15, item.title)
-        item.content_type = _as_string(data.get("content_type"), "article")
+        summary = _required_string(data, "summary", item.title)
+        interview_relevance = _required_string(data, "interview_relevance", item.title)
+        recommended_action = _required_choice(
+            data, "recommended_action", VALID_ACTIONS, item.title
+        )
+        estimated_minutes = _required_positive_int(data, "estimated_minutes", item.title)
+        topics = _required_string_list(data, "topics", item.title)
+        content_type = _required_choice(data, "content_type", VALID_CONTENT_TYPES, item.title)
+
+        item.summary = summary
+        item.interview_relevance = interview_relevance
+        item.recommended_action = recommended_action
+        item.estimated_minutes = estimated_minutes
+        item.topics = topics
+        item.content_type = content_type
         item.stage = "summarized"
-
-        if "topics" in data:
-            item.topics = _as_string_list(data.get("topics"), item.topics, item.title)
 
         return item
 
 
-def _as_string(value, default: str) -> str:
-    return value if isinstance(value, str) else default
+def _required_string(data: dict, field: str, title: str) -> str:
+    value = data.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Invalid summary {field} for '{title}': expected non-empty string")
+    return value.strip()
 
 
-def _as_int(value, default: int, title: str) -> int:
-    if isinstance(value, bool):
-        log.warning(f"Invalid estimated_minutes for '{title}': bool")
-        return default
-    if isinstance(value, int):
-        return value
-    log.warning(f"Invalid estimated_minutes for '{title}': {value!r}")
-    return default
-
-
-def _as_string_list(value, default: list[str], title: str) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(topic, str) for topic in value):
-        log.warning(f"Invalid topics for '{title}': {value!r}")
-        return default
+def _required_choice(data: dict, field: str, choices: frozenset[str], title: str) -> str:
+    value = _required_string(data, field, title)
+    if value not in choices:
+        raise ValueError(f"Invalid summary {field} for '{title}': {value!r}")
     return value
+
+
+def _required_positive_int(data: dict, field: str, title: str) -> int:
+    value = data.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"Invalid summary {field} for '{title}': expected positive integer")
+    return value
+
+
+def _required_string_list(data: dict, field: str, title: str) -> list[str]:
+    # topics 空列表是合法输出（M3 对与面试无关的内容返回 action=ignore + topics=[]），
+    # 只拒绝类型错误（非列表 / 含非字符串元素）。
+    value = data.get(field)
+    if not isinstance(value, list) or not all(
+        isinstance(entry, str) and entry.strip() for entry in value
+    ):
+        raise ValueError(
+            f"Invalid summary {field} for '{title}': expected a list of non-empty strings"
+        )
+    return [entry.strip() for entry in value]
