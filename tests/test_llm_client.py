@@ -45,6 +45,29 @@ async def test_generate_json_accepts_minimax_think_prefix(response, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_generate_json_regenerates_once_after_malformed_json(monkeypatch):
+    client = LLMClient(api_key="test-key")
+    responses = iter([
+        '{"summary": "broken" "topics": []}',
+        '{"summary": "ok", "topics": []}',
+    ])
+    calls = 0
+
+    async def fake_generate(system: str, user: str, expect_json: bool = False) -> str:
+        nonlocal calls
+        calls += 1
+        return next(responses)
+
+    monkeypatch.setattr(client, "generate", fake_generate)
+
+    assert await client.generate_json("system", "user") == {
+        "summary": "ok",
+        "topics": [],
+    }
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_generate_json_rejects_arbitrary_text_before_json(monkeypatch):
     client = LLMClient(api_key="test-key")
 

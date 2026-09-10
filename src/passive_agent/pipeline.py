@@ -95,9 +95,13 @@ class DailyPipeline:
             if stale_count:
                 log.info(f"Marked {stale_count} stale recommendations")
 
+            pending_items = self.db.get_items_by_stage("retry_pending")
+            if pending_items:
+                log.info(f"Retrying {len(pending_items)} pending items")
+
             # 1. Collect
             collectors = self._init_collectors()
-            if not collectors:
+            if not collectors and not pending_items:
                 log.info("No collectors enabled.")
                 self.db.log_daily_run(date.today(), 0, 0, 0, [], status="empty")
                 return PipelineResult(status="empty", stale=stale_count)
@@ -117,7 +121,7 @@ class DailyPipeline:
                     errors.append(msg)
 
             collected_count = len(raw_items)
-            if not raw_items:
+            if not raw_items and not pending_items:
                 log.info("No new items collected from any source.")
                 pushed = await self._push_existing_recommendations(feishu_bot=self.feishu_bot)
                 if pushed > 0:
@@ -127,11 +131,11 @@ class DailyPipeline:
                 return PipelineResult(status=status, pushed=pushed, errors=errors, stale=stale_count)
 
             # 2. Normalize
-            items = self.normalizer.normalize(raw_items)
+            items = self.normalizer.normalize(raw_items) if raw_items else []
             log.info(f"Normalized {len(items)} items")
 
             # 3. Dedup
-            new_items = self.deduplicator.filter(items)
+            new_items = pending_items + self.deduplicator.filter(items)
             processed_count = len(new_items)
             if not new_items:
                 log.info("All items are duplicates.")
@@ -153,7 +157,6 @@ class DailyPipeline:
 
             # 4-6. Summarize → Score → Rank (需要 LLM)
             if self.llm is None:
-                # 无 LLM，仅保存原始数据
                 self.db.save_items(new_items)
                 log.info(f"Saved {len(new_items)} new items (no LLM configured)")
                 self.db.log_daily_run(date.today(), collected_count, processed_count, 0, errors, status="success")
@@ -164,6 +167,13 @@ class DailyPipeline:
                     errors=errors,
                     stale=stale_count,
                 )
+
+            # Persist a dedicated retry queue before calling external services.
+            # Successful items are atomically replaced with their final stage and
+            # score later; failures stay retry_pending for the next pipeline run.
+            for item in new_items:
+                item.stage = "retry_pending"
+            self.db.save_items(new_items)
 
             # 4. Summarize
             summarizer = Summarizer(self.llm, self.config.goals, self.prompts_dir)

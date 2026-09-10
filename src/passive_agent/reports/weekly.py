@@ -116,6 +116,7 @@ def build_weekly_report(config: AppConfig, db: Database, today: date | None = No
     recommended = db.get_items_by_stage("recommended")
     stale = db.get_items_by_stage("stale")
     new = db.get_items_by_stage("new")
+    retry_pending = db.get_items_by_stage("retry_pending")
     summarized = db.get_items_by_stage("summarized")
 
     pushed_items = _items_for_ids(items, pushed_ids)
@@ -138,7 +139,7 @@ def build_weekly_report(config: AppConfig, db: Database, today: date | None = No
         "passive_items": len(passive_ids),
         "recommended_backlog": len(recommended),
         "stale_backlog": len(stale),
-        "new_summarized_backlog": len(new) + len(summarized),
+        "new_summarized_backlog": len(new) + len(retry_pending) + len(summarized),
     }
 
     suggestions = _build_suggestions(summary, pushed_items, engaged_items, passive_items)

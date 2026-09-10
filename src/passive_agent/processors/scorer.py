@@ -42,7 +42,7 @@ class Scorer:
             if isinstance(result, Exception):
                 msg = (
                     f"LLM score failed for '{item.title}': {result}; "
-                    "item not persisted and will retry"
+                    "item kept retry_pending and will retry on the next pipeline run"
                 )
                 log.warning(msg)
                 self.errors.append(msg)

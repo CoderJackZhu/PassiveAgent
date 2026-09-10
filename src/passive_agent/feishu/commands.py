@@ -93,13 +93,16 @@ class CommandHandler:
 
     async def _cmd_status(self) -> str:
         stages = {}
-        for stage in ("new", "summarized", "recommended", "stale", "archived", "ignored"):
+        for stage in (
+            "new", "retry_pending", "summarized", "recommended", "stale", "archived", "ignored"
+        ):
             stages[stage] = len(self.db.get_items_by_stage(stage))
 
         paused_text = " (已暂停推送)" if self.is_paused() else ""
         return (
             f"系统状态{paused_text}：\n"
-            f"  待处理：{stages['new'] + stages['summarized']}\n"
+            f"  待处理：{stages['new'] + stages['retry_pending'] + stages['summarized']}\n"
+            f"  重试队列：{stages['retry_pending']}\n"
             f"  今日推荐：{stages['recommended']}\n"
             f"  已过期推荐：{stages['stale']}\n"
             f"  已归档：{stages['archived']}\n"

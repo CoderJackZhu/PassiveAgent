@@ -29,6 +29,23 @@ def test_push_command_returns_cli_guidance(db):
     assert text == "请使用 CLI 运行 passive-agent daily"
 
 
+def test_status_command_includes_retry_pending_items(db):
+    db.save_item(
+        Item(
+            id="retry-pending",
+            source="hf_daily_papers",
+            title="Retry Pending",
+            stage="retry_pending",
+        )
+    )
+    handler = CommandHandler(db)
+
+    text = asyncio.run(handler.handle("状态"))
+
+    assert text is not None
+    assert "重试队列：1" in text
+
+
 def test_push_command_runs_pipeline_when_context_provided(config_dir, db, monkeypatch):
     config = load_config(config_dir)
     llm = object()

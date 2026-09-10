@@ -86,6 +86,7 @@ def _notify_daily_error(feishu_bot, result):
 
 STAGE_ROWS = (
     ("New", "new", "cyan"),
+    ("Retry Pending", "retry_pending", "yellow"),
     ("Summarized", "summarized", "blue"),
     ("Recommended", "recommended", "green"),
     ("Stale", "stale", "yellow"),
@@ -587,6 +588,7 @@ def status(ctx):
 
     try:
         new_count = len(db.get_items_by_stage("new"))
+        retry_pending_count = len(db.get_items_by_stage("retry_pending"))
         summarized_count = len(db.get_items_by_stage("summarized"))
         recommended_count = len(db.get_items_by_stage("recommended"))
         archived_count = len(db.get_items_by_stage("archived"))
@@ -595,6 +597,7 @@ def status(ctx):
 
         click.echo("Passive Agent Status:")
         click.echo(f"  New:         {new_count}")
+        click.echo(f"  Retry Pending: {retry_pending_count}")
         click.echo(f"  Summarized:  {summarized_count}")
         click.echo(f"  Recommended: {recommended_count}")
         click.echo(f"  Stale:       {stale_count}")

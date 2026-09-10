@@ -284,7 +284,8 @@ async def test_daily_pipeline_total_llm_failure_is_error_and_items_remain_retrya
     assert failed.recommended == []
     assert failed.pushed == 0
     assert bot.batches == []
-    assert db.get_all_titles() == set()
+    pending = db.get_items_by_stage("retry_pending")
+    assert [item.title for item in pending] == [title]
     assert not (Path(config.reports_dir) / f"daily_review_{date.today().isoformat()}.md").exists()
     assert any(failure_stage in error and "retry" in error.lower() for error in failed.errors)
 
@@ -297,6 +298,7 @@ async def test_daily_pipeline_total_llm_failure_is_error_and_items_remain_retrya
     assert title in " ".join(json.loads(row["errors"]))
 
     pipeline.llm = FakeLLM()
+    pipeline._init_collectors = lambda: [FakeCollector([])]
     retried = await pipeline.run()
 
     assert retried.status == "success"
@@ -334,7 +336,9 @@ async def test_daily_pipeline_partial_llm_failure_only_processes_successes(
     assert result.status == "success"
     assert [item.item.title for item in result.recommended] == [good_title]
     assert [[item.item.title for item in batch] for batch in bot.batches] == [[good_title]]
-    assert db.get_all_titles() == {good_title}
+    pending = db.get_items_by_stage("retry_pending")
+    assert [item.title for item in pending] == [failed_title]
+    assert db.get_all_titles() == {good_title, failed_title}
     assert all(item.item.priority_score != 50.0 for item in result.recommended)
     assert any(failure_stage in error and failed_title in error for error in result.errors)
 
@@ -345,12 +349,38 @@ async def test_daily_pipeline_partial_llm_failure_only_processes_successes(
 
     retry_bot = RecordingBot()
     retry_pipeline = DailyPipeline(config, db, llm=FakeLLM(), feishu_bot=retry_bot)
-    retry_pipeline._init_collectors = lambda: [FakeCollector([raw_items[1]])]
+    retry_pipeline._init_collectors = lambda: [FakeCollector([])]
 
     retried = await retry_pipeline.run()
 
     assert retried.status == "success"
     assert [item.item.title for item in retried.recommended] == [failed_title]
+
+
+@pytest.mark.asyncio
+async def test_daily_pipeline_does_not_treat_github_star_index_as_retry_queue(
+    config_dir, db, tmp_path
+):
+    config = load_config(config_dir)
+    config.reports_dir = str(tmp_path / "reports")
+    config.prompts_dir = str(Path.cwd() / "prompts")
+    star = Item(
+        id="indexed-star",
+        source="github_star",
+        title="Indexed GitHub Star",
+        url="https://github.com/example/indexed",
+        stage="new",
+    )
+    db.save_item(star)
+    bot = RecordingBot()
+    pipeline = DailyPipeline(config, db, llm=FakeLLM(), feishu_bot=bot)  # type: ignore[arg-type]
+    pipeline._init_collectors = lambda: [FakeCollector([])]
+
+    result = await pipeline.run()
+
+    assert result.status == "empty"
+    assert bot.batches == []
+    assert db.get_item(star.id).stage == "new"
 
 
 @pytest.mark.asyncio
@@ -380,11 +410,13 @@ async def test_daily_pipeline_enrich_failure_leaves_scored_item_retryable(
     assert failed.recommended == []
     assert failed.pushed == 0
     assert bot.batches == []
-    assert db.get_all_titles() == set()
+    pending = db.get_items_by_stage("retry_pending")
+    assert [item.title for item in pending] == [title]
     assert db.conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0] == 0
     assert not (Path(config.reports_dir) / f"daily_review_{date.today().isoformat()}.md").exists()
 
     monkeypatch.setattr(Ranker, "enrich", original_enrich)
+    pipeline._init_collectors = lambda: [FakeCollector([])]
     retried = await pipeline.run()
 
     assert retried.status == "success"

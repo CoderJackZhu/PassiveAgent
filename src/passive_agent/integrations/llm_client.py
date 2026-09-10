@@ -86,10 +86,19 @@ class LLMClient:
                         raise
 
     async def generate_json(self, system: str, user: str) -> dict:
-        text = await self.generate(system, user, expect_json=True)
-        text = _strip_think_prefix(text).strip()
-        text = _strip_markdown_json_fence(text)
-        return json.loads(text)
+        for parse_attempt in range(2):
+            text = await self.generate(system, user, expect_json=True)
+            text = _strip_think_prefix(text).strip()
+            text = _strip_markdown_json_fence(text)
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                if parse_attempt == 0:
+                    log.warning("LLM returned malformed JSON; regenerating once")
+                    continue
+                raise
+
+        raise AssertionError("unreachable")
 
 
 def _strip_think_prefix(text: str) -> str:

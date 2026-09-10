@@ -25,6 +25,12 @@ def test_dashboard_command_shows_expected_sections(config_dir, db, monkeypatch):
             recommended_action="read",
         ),
         Item(id="new", source="obsidian_inbox", title="New Item", stage="new"),
+        Item(
+            id="retry",
+            source="hf_daily_papers",
+            title="Retry Item",
+            stage="retry_pending",
+        ),
     ])
 
     monkeypatch.setattr(main_module, "load_config", lambda _config_dir: config)
@@ -33,6 +39,7 @@ def test_dashboard_command_shows_expected_sections(config_dir, db, monkeypatch):
 
     assert result.exit_code == 0
     assert "Stage counts" in result.output
+    assert "Retry Pending" in result.output
     assert "Today's recommendations" in result.output
     assert "Source health" in result.output
     assert "Pause status" in result.output
