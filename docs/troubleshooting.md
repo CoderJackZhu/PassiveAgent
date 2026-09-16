@@ -49,7 +49,7 @@ uv run passive-agent feishu-push --stage recommended --limit 5
 常见原因是项目放在 `Documents` / `Desktop` / `Downloads` 这类 macOS 隐私保护目录下。建议放到：
 
 ```text
-~/Code/Agents/PassiveAgent
+~/Code/Services/PassiveAgent
 ```
 
 如果已经放错位置，移动后重新执行：

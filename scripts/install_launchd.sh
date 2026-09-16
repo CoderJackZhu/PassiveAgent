@@ -82,9 +82,9 @@ such as:
   PermissionError: [Errno 1] Operation not permitted: .../.venv/pyvenv.cfg
 
 Recommended relocation and reinstall:
-  mkdir -p "\$HOME/Code/Agents"
-  mv "$project_dir" "\$HOME/Code/Agents/PassiveAgent"
-  cd "\$HOME/Code/Agents/PassiveAgent"
+  mkdir -p "\$HOME/Code/Services"
+  mv "$project_dir" "\$HOME/Code/Services/PassiveAgent"
+  cd "\$HOME/Code/Services/PassiveAgent"
   uv sync --all-extras
   scripts/install_launchd.sh
 

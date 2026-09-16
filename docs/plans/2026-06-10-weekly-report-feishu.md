@@ -13,7 +13,7 @@
 ## Current State Snapshot
 
 - Date checked: 2026-06-10 21:08 CST
-- Repo: `/Users/jackzhu/Code/Agents/PassiveAgent`
+- Repo: `/Users/jackzhu/Code/Services/PassiveAgent`
 - Branch: `main` tracking `origin/main`
 - Initial git status: clean
 - Codex CLI: `/opt/homebrew/bin/codex`, version `0.138.0`
@@ -207,7 +207,7 @@ MVP definition:
 If context is lost, resume by reading this file and running:
 
 ```bash
-cd /Users/jackzhu/Code/Agents/PassiveAgent
+cd /Users/jackzhu/Code/Services/PassiveAgent
 git status --short --branch
 git diff --stat
 uv run pytest tests/ -v
